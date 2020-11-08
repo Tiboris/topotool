@@ -1,0 +1,17 @@
+A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P
+A-B
+A-C
+A-D
+A-E
+A-F
+A-G
+H-I
+I-F
+J-K
+K-O
+L-N
+N-O
+P-O
+O-A
+H-M
+M-O
