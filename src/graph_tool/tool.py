@@ -33,9 +33,8 @@ def load_context(ctx, storage):
 @click.pass_context
 def graphcli(ctx, storage, output, debug):
     """graphcli tool for topology"""
-    ctx.ensure_object(dict)
-    with shelve.open(storage) as db:
-        db["data"] = ctx.obj
+    ctx = load_context(ctx, storage)
+
 
 
 @graphcli.command()
@@ -84,15 +83,58 @@ def draw(ctx, storage):
 @graphcli.command()
 @click.option("-o", "--output", default="./topology_playbook")
 @click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-m", "--master", default="A")
 @click.pass_context
-def playbook(ctx, storage, output):
+def playbook(ctx, master, storage, output):
     ctx = load_context(ctx, storage)
 
     G = ctx.obj[GRAPH_NX]
 
-    levels = [["A"], list(G.adj["A"])]
+    actual = master
+    levels = [[actual]]
+    processed = []
 
-    print(levels)
+    to_proccess = [actual]
+
+    while True:
+        if not to_proccess:
+            break
+
+        new = []
+        for process in to_proccess:
+            # print(process)
+            # print(type(process))
+            # print(G.adj[process])
+            for succ in list(G.adj[process]):
+                if succ in processed or succ in to_proccess:
+                    continue
+                # print("adding", succ)
+                if succ not in new:
+                    # data_4.in demostrates this if node H
+                    # is at last level accessed by two predecesors
+                    new.append(succ)
+
+        processed = processed + to_proccess
+        to_proccess = []
+        # print("cleared", to_proccess)
+        to_proccess = new
+        # print("added", to_proccess)
+        if new:
+            levels = levels + [new]
+
+    processed_all = sorted(G.nodes) == sorted(processed)
+    print("Processed all:", processed_all)
+    if not processed_all:
+        all_nodes = set(sorted(G.nodes))
+        processed = set(sorted(processed))
+        print(f"All_nodes:{all_nodes}\nProcessed:{processed}")
+        print(
+            "Differs in the node(s):",
+            list(all_nodes.symmetric_difference(processed)),
+        )
+
+    for level in levels:
+        print(level)
 
 
 @graphcli.command()
