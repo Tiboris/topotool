@@ -16,12 +16,15 @@ GRAPH_NX = "graph_networkx"
 
 
 def load_context(ctx, storage):
+    ctx.ensure_object(dict)
     if not ctx.obj:
-        ctx.ensure_object(dict)
-        with shelve.open(storage) as db:
-            ctx.obj[GRAPH_DATA] = db[GRAPH_DATA]
-            ctx.obj[GRAPH_OBJECT] = db[GRAPH_OBJECT]
-            ctx.obj[GRAPH_NX] = db[GRAPH_NX]
+        try:
+            with shelve.open(storage) as db:
+                ctx.obj[GRAPH_DATA] = db[GRAPH_DATA]
+                ctx.obj[GRAPH_OBJECT] = db[GRAPH_OBJECT]
+                ctx.obj[GRAPH_NX] = db[GRAPH_NX]
+        except KeyError:
+            pass
 
     return ctx
 
@@ -34,7 +37,6 @@ def load_context(ctx, storage):
 def graphcli(ctx, storage, output, debug):
     """graphcli tool for topology"""
     ctx = load_context(ctx, storage)
-
 
 
 @graphcli.command()
@@ -80,6 +82,10 @@ def draw(ctx, storage):
     plt.show()
 
 
+def levels_from_fist_successors(successors):
+    return [list(successors[0][0]), list(successors[0][1])]
+
+
 @graphcli.command()
 @click.option("-o", "--output", default="./topology_playbook")
 @click.option("-s", "--storage", default="./.graph_storage.json")
@@ -90,48 +96,31 @@ def playbook(ctx, master, storage, output):
 
     G = ctx.obj[GRAPH_NX]
 
-    actual = master
-    levels = [[actual]]
-    processed = []
+    all_successors = list(nx.bfs_successors(G, master))
 
-    to_proccess = [actual]
+    levels = levels_from_fist_successors(all_successors[:1])
+    successors = all_successors[1:]
 
-    while True:
-        if not to_proccess:
-            break
+    new = []
 
-        new = []
-        for process in to_proccess:
-            # print(process)
-            # print(type(process))
-            # print(G.adj[process])
-            for succ in list(G.adj[process]):
-                if succ in processed or succ in to_proccess:
-                    continue
-                # print("adding", succ)
-                if succ not in new:
-                    # data_4.in demostrates this if node H
-                    # is at last level accessed by two predecesors
-                    new.append(succ)
+    for s, f in successors:
+        # print("------------------------------------")
+        # print("s:", s, "f:", f, "level:", levels[-1])
+        if s in levels[-1]:
+            # print(s, f)
+            new = new + f
+            # print("+")
+        else:
+            # print(s, f)
+            # print("next", f, "level:", new)
+            # print("before", levels)
+            levels.append(new)
+            # print("afeter", levels)
+            new = f
+    if new:  # add level at the end of for cycle so last is added
+        levels.append(new)
 
-        processed = processed + to_proccess
-        to_proccess = []
-        # print("cleared", to_proccess)
-        to_proccess = new
-        # print("added", to_proccess)
-        if new:
-            levels = levels + [new]
-
-    processed_all = sorted(G.nodes) == sorted(processed)
-    print("Processed all:", processed_all)
-    if not processed_all:
-        all_nodes = set(sorted(G.nodes))
-        processed = set(sorted(processed))
-        print(f"All_nodes:{all_nodes}\nProcessed:{processed}")
-        print(
-            "Differs in the node(s):",
-            list(all_nodes.symmetric_difference(processed)),
-        )
+    print(levels)
 
     for level in levels:
         print(level)
