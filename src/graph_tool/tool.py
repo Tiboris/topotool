@@ -4,6 +4,8 @@ import click
 import sys
 import shelve
 
+from matplotlib.pyplot import colorbar
+
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -16,7 +18,8 @@ GRAPH_OBJECT = "graph_object"
 GRAPH_NX = "graph_networkx"
 LEVELS = "levels"
 PRED = "predecessors"
-BACKBONE = "backbone"
+BACKBONE = "backbone_edges"
+EDGES = "edges"
 MASTER = "master_node"
 
 
@@ -197,6 +200,21 @@ def jenkinsfile(ctx, output, out_dir, storage):
     print(levels)
 
 
+def compatible_backbone_edges(G, master):
+    """Rerurn edges not based on direction of bfs walk"""
+    all_edges = set(G.edges)
+    b_edges = set(nx.bfs_edges(G, master))
+
+    backbone_edges = set()
+    for e in b_edges:
+        if e in all_edges:
+            backbone_edges.add(e)
+        else:
+            backbone_edges.add((e[1], e[0]))
+
+    return backbone_edges
+
+
 @graphcli.command()
 @click.option("-o", "--output", default="./topology_playbook")
 @click.option("-d", "--out-dir", default="./FILES")
@@ -218,19 +236,40 @@ def playbook(ctx, storage, out_dir, template, output):
     print(f"Create temporary {out_dir} folder")
     os.makedirs(out_dir, exist_ok=True)
 
-    print(levels, pred)
+    all_edges = set(G.edges)
+    backbone_edges = compatible_backbone_edges(G, master)
 
-    backbone = list(nx.bfs_edges(G, master))
+    missing_edges = all_edges.difference(backbone_edges)
 
-    print("BACKBONE", backbone)
+    # print(all_edges, len(all_edges))
+    # print(backbone_edges, len(backbone_edges))
+    # print(missing_edges, len(missing_edges))
 
-    print(sorted(G.edges))
-    print(sorted(backbone))
-    ctx.obj[BACKBONE] = backbone
+    ctx.obj[BACKBONE] = backbone_edges
+    ctx.obj[EDGES] = all_edges
 
+    missing = nx.Graph()
+    missing.add_edges_from(backbone_edges, color="black")
+    missing.add_edges_from(missing_edges, color="red")
+    colors = [missing[u][v]['color'] for u, v in missing.edges()]
 
+    with shelve.open(storage) as db:
+        for key in ctx.obj:
+            db[key] = ctx.obj[key]
 
+    nx.draw(missing, with_labels=True, font_weight='bold', edge_color=colors)
+    # nx.draw_planar(
+    #     missing, with_labels=True, font_weight='bold', edge_color=colors
+    # )
 
+    plt.show()
+
+    return {
+        LEVELS: levels,
+        PRED: pred,
+        BACKBONE: backbone_edges,
+        EDGES: all_edges,
+    }
 
 
 if __name__ == "__main__":
