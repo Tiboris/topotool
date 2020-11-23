@@ -2,3 +2,4 @@ click
 networkx
 wheel
 matplotlib # yum install gcc-c++
+jinja2

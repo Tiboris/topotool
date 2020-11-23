@@ -3,14 +3,14 @@ import os
 import click
 import sys
 import shelve
-
-from matplotlib.pyplot import colorbar
-
 import networkx as nx
 import matplotlib.pyplot as plt
 
-from copy import deepcopy
+
 from graph_tool.graphs import Graph
+from copy import deepcopy
+from matplotlib.pyplot import colorbar
+from jinja2 import Template
 
 
 GRAPH_DATA = "graph_input_data"
@@ -34,10 +34,87 @@ def load_context(ctx, storage):
                 ctx.obj[LEVELS] = db[LEVELS]
                 ctx.obj[PRED] = db[PRED]
                 ctx.obj[MASTER] = db[MASTER]
+                ctx.obj[EDGES] = db[EDGES]
+                ctx.obj[BACKBONE] = db[BACKBONE]
         except KeyError:
             pass
 
     return ctx
+
+
+def save_data(path, data):
+    """
+    Writes data with file.write() to file specified by path.
+    if path is not specified use stdout.
+    """
+    with open(path, 'w') as data_file:
+        data_file.write(data)
+
+
+def load_jinja_template(path):
+    with open(path) as file_:
+        template = Template(file_.read())
+    return template
+
+
+def gen_metadata(name, node_os, destination,
+                 project, run, job, template,
+                 tool_repo, tool_branch):
+    metadata = template.render(
+        dnsname=name,
+        node_os=node_os,
+        project=project,
+        run=run,
+        job=job,
+        tool_repo=tool_repo,
+        tool_branch=tool_branch
+    )
+    output_file = os.path.join(destination, f"{name}.yaml")
+    save_data(output_file, metadata)
+
+
+def generate_topo(nodes):
+    raise NotImplementedError()
+
+
+def create_level(level, max_levels, level_width):
+    level_base = f"y{level}"
+    # if the actual level is first or last return only level base (one server)
+    if level == max_levels - 1 or level == 0:
+        return [level_base]
+
+    level = []
+    # otherwise create level with number of servers equal to max_level_width
+    for pos in range(level_width):
+        level.append(f"{level_base}x{pos}")
+
+    return level
+
+
+def create_basic_topo(max_width, max_levels):
+    topo = {
+        "levels": {},
+        "predecessors": {},
+        "edges": [],
+        "backbone_edges": [],
+    }
+    edges = []
+    predecessors = {}
+    for level in range(max_levels):
+        topo["levels"][level] = create_level(level, max_levels, max_width)
+        pred_idx = 0
+        if level:
+            for replica in topo["levels"][level]:
+                edges = edges + [(item, replica) for item in topo["levels"][level - 1]]
+                predecessors[replica] =  topo["levels"][level - 1][pred_idx]
+                if level - 1 != 0 and level != max_levels - 1:
+                    pred_idx += 1
+
+    topo["edges"] = set(edges)
+    topo["predecessors"] = predecessors
+    topo["backbone_edges"] = set([(value, key) for key, value in predecessors.items()])
+
+    return topo
 
 
 @click.group(chain=True)
@@ -83,6 +160,7 @@ def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
     ctx.obj[GRAPH_OBJECT] = graph_data
 
     G = nx.Graph()
+    G.name = "Complete graph of topology"
     for vertex in graph_data.vertices:
         G.add_node(vertex)
 
@@ -134,9 +212,62 @@ def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
     ctx.obj[LEVELS] = level_dict
     ctx.obj[PRED] = predecessors
     ctx.obj[MASTER] = master
+    ctx.obj[BACKBONE] = compatible_backbone_edges(G, master)
+    ctx.obj[EDGES] = set(G.edges)
+    print("Loading of topology done.")
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
+            # print(key)
+            db[key] = ctx.obj[key]
+
+
+@graphcli.command()
+@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option(
+    "--branches", "-x",
+    type=click.IntRange(3, 20),
+    help="Number of topology branches <3-20> to be generated (x-axis)."
+)
+@click.option(
+    "--length", "-y",
+    type=click.IntRange(3, 20),
+    help="Set topology length <3-20> to be generated (y-axis)."
+)
+@click.option(
+    "--nodes", "-n",
+    type=click.IntRange(1, 60),
+    help="Needed number of topology nodes length <3-60> (server count)."
+)
+@click.pass_context
+def generate(ctx, storage, branches, length, nodes):
+    """Generate a topology graph based on options."""
+    topo = {}
+    if nodes:
+        topo = generate_topo(nodes)
+    else:
+        if not branches:
+            branches = 3
+        if not length:
+            length = 3
+        topo = create_basic_topo(max_width=branches, max_levels=length)
+
+    G = nx.Graph()
+    G.add_edges_from(topo["edges"])
+
+    ctx.obj[GRAPH_NX] = G
+    ctx.obj[GRAPH_DATA] = None
+
+    ctx.obj[LEVELS] = topo["levels"]
+    ctx.obj[PRED] = topo["predecessors"]
+    ctx.obj[MASTER] = "y0"
+    ctx.obj[BACKBONE] = topo["backbone_edges"]
+    ctx.obj[EDGES] = topo["edges"]
+    print("Generating of topology done.")
+
+    with shelve.open(storage) as db:
+        for key in ctx.obj:
+            # print(key)
             db[key] = ctx.obj[key]
 
 
@@ -221,14 +352,14 @@ def compatible_backbone_edges(G, master):
 @click.option("-t", "--template", default="../data/inventory_template.j2")  # FIXME
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
-def playbook(ctx, storage, out_dir, template, output):
+def playbooks(ctx, storage, out_dir, template, output):
     ctx = load_context(ctx, storage)
 
     try:
         pred = ctx.obj[PRED]
         levels = ctx.obj[LEVELS]
-        G = ctx.obj[GRAPH_NX]
-        master = ctx.obj[MASTER]
+        backbone_edges = ctx.obj[BACKBONE]
+        all_edges = ctx.obj[EDGES]
     except KeyError:
         print("Please load or generate the topology first.")
         exit(1)
@@ -236,19 +367,15 @@ def playbook(ctx, storage, out_dir, template, output):
     print(f"Create temporary {out_dir} folder")
     os.makedirs(out_dir, exist_ok=True)
 
-    all_edges = set(G.edges)
-    backbone_edges = compatible_backbone_edges(G, master)
-
     missing_edges = all_edges.difference(backbone_edges)
 
     # print(all_edges, len(all_edges))
     # print(backbone_edges, len(backbone_edges))
     # print(missing_edges, len(missing_edges))
 
-    ctx.obj[BACKBONE] = backbone_edges
-    ctx.obj[EDGES] = all_edges
-
     missing = nx.Graph()
+    # print(dir(missing))
+    missing.name = "Graph with red missing edges from backbone"
     missing.add_edges_from(backbone_edges, color="black")
     missing.add_edges_from(missing_edges, color="red")
     colors = [missing[u][v]['color'] for u, v in missing.edges()]
@@ -262,14 +389,43 @@ def playbook(ctx, storage, out_dir, template, output):
     #     missing, with_labels=True, font_weight='bold', edge_color=colors
     # )
 
-    plt.show()
-
-    return {
+    res = {
         LEVELS: levels,
         PRED: pred,
         BACKBONE: backbone_edges,
         EDGES: all_edges,
     }
+
+    # print(res)
+    plt.show()
+
+    return res
+
+
+@graphcli.command()
+@click.option("-o", "--output", default="./topology_playbook")
+@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.pass_context
+def analyze(ctx, storage, output):
+    ctx = load_context(ctx, storage)
+
+    try:
+        G = ctx.obj[GRAPH_NX]
+        # master = ctx.obj[MASTER]
+    except KeyError:
+        print("Please load or generate the topology first.")
+        exit(1)
+
+    print("Articulation points:", list(nx.articulation_points(G)))
+
+    print("Biconected components:", list(nx.biconnected_components(G)))
+    print("Biconected component edges:", list(nx.biconnected_component_edges(G)))
+    print("Connected components:", str(nx.number_connected_components(G)))
+
+    for node in G:
+        print("Degree of Node in graph:", f"{node}:", str(nx.degree(G, node)))
+
+    print("===\nGraph info:\n" + str(nx.info(G)))
 
 
 if __name__ == "__main__":
