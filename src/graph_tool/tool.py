@@ -98,21 +98,30 @@ def create_basic_topo(max_width, max_levels):
         "edges": [],
         "backbone_edges": [],
     }
-    edges = []
+
     predecessors = {}
     for level in range(max_levels):
         topo["levels"][level] = create_level(level, max_levels, max_width)
         pred_idx = 0
         if level:
             for replica in topo["levels"][level]:
-                edges = edges + [(item, replica) for item in topo["levels"][level - 1]]
-                predecessors[replica] =  topo["levels"][level - 1][pred_idx]
+                predecessor = topo["levels"][level - 1][pred_idx]
+                predecessors[replica] = predecessor
+
+                if level != max_levels - 1:
+                    topo["edges"] = topo["edges"] + [(predecessor, replica)]
+                else:  # if max level then add all from previous level as pred
+                    topo["edges"] = topo["edges"] + [
+                        (pred, replica) for pred in topo["levels"][level-1]
+                    ]
+
                 if level - 1 != 0 and level != max_levels - 1:
                     pred_idx += 1
 
-    topo["edges"] = set(edges)
     topo["predecessors"] = predecessors
-    topo["backbone_edges"] = set([(value, key) for key, value in predecessors.items()])
+    topo["backbone_edges"] = [
+        (value, key) for key, value in predecessors.items()
+    ]
 
     return topo
 
@@ -259,9 +268,13 @@ def generate(ctx, storage, branches, length, nodes):
     ctx.obj[GRAPH_DATA] = None
 
     ctx.obj[LEVELS] = topo["levels"]
+    print(topo["levels"])
+
     ctx.obj[PRED] = topo["predecessors"]
     ctx.obj[MASTER] = "y0"
     ctx.obj[BACKBONE] = topo["backbone_edges"]
+    for edge in topo["edges"]:
+        print(edge)
     ctx.obj[EDGES] = topo["edges"]
     print("Generating of topology done.")
 
@@ -316,7 +329,7 @@ def inventory(ctx, storage, out_dir, template, output):
 @click.option("-t", "--template", default="../data/jenkinsjob.j2")  # FIXME
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
-def jenkinsfile(ctx, output, out_dir, storage):
+def jenkinsjob(ctx, output, template, out_dir, storage):
     ctx = load_context(ctx, storage)
 
     try:
@@ -328,7 +341,26 @@ def jenkinsfile(ctx, output, out_dir, storage):
     print(f"Create temporary {out_dir} folder")
     os.makedirs(out_dir, exist_ok=True)
 
-    print(levels)
+    print("Generate Jenkinsfile for whole topology")
+    # output_jenkins_job = os.path.join(out_dir, output)
+
+    # jenkinsfile = jenkins_template.render(
+    #     levels=levels,
+    #     node_os=node_os,
+    #     idm_ci=idm_ci,
+    #     repo_branch=repo_branch,
+    #     metadata_storage=metadata_storage,
+    #     project=project,
+    #     run=run,
+    #     job=job,
+    #     freeipa_upstream_copr=freeipa_upstream_copr,
+    #     freeipa_downstream_copr=freeipa_downstream_copr,
+    #     freeipa_custom_repo=freeipa_custom_repo,
+    #     ansible_freeipa_upstream_copr=ansible_freeipa_upstream_copr,
+    #     ansible_freeipa_downstream_copr=ansible_freeipa_downstream_copr,
+    #     ansible_freeipa_custom_repo=ansible_freeipa_custom_repo
+    # )
+    # save_data(output_jenkins_job, jenkinsfile)
 
 
 def compatible_backbone_edges(G, master):
