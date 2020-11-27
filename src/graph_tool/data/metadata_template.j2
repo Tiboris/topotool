@@ -1,0 +1,45 @@
+domains:
+  - name: ipadomain.test
+    type: ipa
+    hosts:
+      - name: {{ dnsname }}.ipadomain.test
+        role: replica
+        group: ipaserver
+        os: {{ node_os }}
+phases:
+  - name: init
+    steps:
+      - playbook: init/testrunner-dir.yaml
+      - command: |
+          git clone --depth 1 {{ tool_repo }} --branch={{ tool_branch }}
+        cwd: ../
+      - playbook: ../idm-performance-testing/large-scale/playbooks/perf-config.yaml
+  - name: provision
+    steps:
+      - playbook: provision/linchpin-up.yaml
+      - playbook: provision/wait.yaml
+      - playbook: provision/chrony.yaml
+      - playbook: ../idm-performance-testing/large-scale/playbooks/scale-collect.yaml
+        extra_vars:
+          project: {{ project }}
+          run: {{ run }}
+          job: {{ job }}
+  - name: prep
+    steps:
+      - playbook: prep/redhat-base.yaml
+      - playbook: prep/repos.yaml
+      - playbook: ../idm-performance-testing/large-scale/playbooks/add-repo.yaml
+      - playbook: ../idm-performance-testing/large-scale/playbooks/scale-firewall.yaml
+      # - playbook: ../idm-performance-testing/large-scale/playbooks/pbench-agent.yaml
+      - command: wget -np -nH --cut-dirs 4 -r idm-artifacts.usersys.redhat.com/{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/
+      - command: tail -n +3 {{ job }}/y0.*.inv | awk '{if($1!="==>") print $0}' >> ./config/test.inventory.yaml
+      - command: "sed -i '/hosts: / d' ./config/test.inventory.yaml"
+      - command: cat ./config/test.inventory.yaml
+      - playbook: ../idm-performance-testing/large-scale/playbooks/perf-network.yaml
+  - name: test
+    steps:
+      - command: echo READY
+  - name: teardown
+    steps:
+      - command: echo SKIP-TEARDOWN
+

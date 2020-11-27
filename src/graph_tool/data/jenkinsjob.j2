@@ -1,0 +1,42 @@
+@Library("idm-ci@master")
+import idmci.*
+
+env.IDMCI_GITREPO = '{{ idm_ci }}'
+env.IDMCI_BRANCH = '{{ repo_branch }}'
+env.IPA_EMAIL = '{{ ipa_email }}'
+env.ANSIBLE_GATHER_TIMEOUT = '60'
+
+env.FREEIPA_UPSTREAM_COPR = '{{ freeipa_upstream_copr }}'
+env.FREEIPA_DOWNSTREAM_COPR = '{{ freeipa_downstream_copr }}'
+env.FREEIPA_CUSTOM_REPO = '{{ freeipa_custom_repo }}'
+env.ANSIBLE_FREEIPA_UPSTREAM_COPR = '{{ ansible_freeipa_upstream_copr }}'
+env.ANSIBLE_FREEIPA_DOWNSTREAM_COPR = '{{ ansible_freeipa_downstream_copr }}'
+env.ANSIBLE_FREEIPA_CUSTOM_REPO = '{{ ansible_freeipa_custom_repo }}'
+
+node {
+    sh script: "printenv"
+    {% for level in levels %}
+    stage("y{{ level }}") {
+        parallel(
+        {% for node in levels[level] %}
+            "{{ node }}": {
+                new TeRun([
+                    metadata: 'http://{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/{{ node }}.yaml',
+                    test: '{{ node }}'
+                ]).exec('idm-ci-slave')
+            },
+        {% endfor %}
+        )
+    }
+    {% endfor %}
+    stage("controller") {
+        parallel(
+            "controller-deployment": {
+                new TeRun([
+                    metadata: 'http://{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/controller.yaml',
+                    test: 'controller'
+                ]).exec('idm-ci-slave')
+            },
+        )
+    }
+}

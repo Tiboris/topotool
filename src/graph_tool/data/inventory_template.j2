@@ -1,0 +1,29 @@
+[ipaserver]
+{{ master_server }}.ipadomain.test
+
+{#- replicas #}
+{%-  for level, replicas in levels.items() %}
+{%-    if level %}
+[ipareplicas_y{{ level }}]
+{%-      for r in replicas %}
+{{ r }}.ipadomain.test ipareplica_servers={{ predecessors[r] }}.ipadomain.test
+{%-      endfor %}
+{%-    endif %}
+{%   endfor %}
+
+[ipacluster:children]
+ipaserver
+{%-  for level in range(1, levels|length ) %}
+ipareplicas_y{{ level }}
+{%-   endfor %}
+
+[ipacluster:vars]
+ipaadmin_password=ADMPassword123
+ipadm_password=DMPassword123
+ipaserver_domain=ipadomain.test
+ipaserver_realm=IPADOMAIN.TEST
+
+[ipaserver:vars]
+ipaserver_setup_dns=yes
+ipaserver_auto_forwarders=yes
+ipaserver_auto_reverse=yes
