@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 import os
+from os import pipe
 import click
 import sys
 import shelve
+
+import jinja2
 import networkx as nx
 import matplotlib.pyplot as plt
 
 
+from collections import Counter
 from graph_tool.graphs import Graph
 from copy import deepcopy
 from matplotlib.pyplot import colorbar
 from jinja2 import Template
+from itertools import chain
 
 
 GRAPH_DATA = "graph_input_data"
@@ -21,6 +26,7 @@ PRED = "predecessors"
 BACKBONE = "backbone_edges"
 EDGES = "edges"
 MASTER = "master_node"
+SCALING_DEFAULTS = "../src/graph_tool/data"
 
 
 def load_context(ctx, storage):
@@ -118,10 +124,10 @@ def create_basic_topo(max_width, max_levels):
                 if level - 1 != 0 and level != max_levels - 1:
                     pred_idx += 1
 
-    topo["predecessors"] = predecessors
     topo["backbone_edges"] = [
         (value, key) for key, value in predecessors.items()
     ]
+    topo["predecessors"] = predecessors
 
     return topo
 
@@ -211,13 +217,6 @@ def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
         # print(level)
         key += 1
 
-    # for level, replicas in level_dict.items():  # for inventory
-    #     print("---")
-    #     print(level, replicas)
-    #     if level:
-    #         for replica in replicas:
-    #             print(replica, predecessors[replica])
-
     ctx.obj[LEVELS] = level_dict
     ctx.obj[PRED] = predecessors
     ctx.obj[MASTER] = master
@@ -227,7 +226,6 @@ def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
-            # print(key)
             db[key] = ctx.obj[key]
 
 
@@ -248,8 +246,12 @@ def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
     type=click.IntRange(1, 60),
     help="Needed number of topology nodes length <3-60> (server count)."
 )
+@click.option(
+    "--master", "-m", default="y0",
+    help="Master node name."
+)
 @click.pass_context
-def generate(ctx, storage, branches, length, nodes):
+def generate(ctx, storage, branches, length, nodes, master):
     """Generate a topology graph based on options."""
     topo = {}
     if nodes:
@@ -268,15 +270,12 @@ def generate(ctx, storage, branches, length, nodes):
     ctx.obj[GRAPH_DATA] = None
 
     ctx.obj[LEVELS] = topo["levels"]
-    print(topo["levels"])
 
     ctx.obj[PRED] = topo["predecessors"]
-    ctx.obj[MASTER] = "y0"
-    ctx.obj[BACKBONE] = topo["backbone_edges"]
-    for edge in topo["edges"]:
-        print(edge)
+    ctx.obj[MASTER] = master
+    ctx.obj[BACKBONE] = compatible_backbone_edges(G, master)
+
     ctx.obj[EDGES] = topo["edges"]
-    print("Generating of topology done.")
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
@@ -301,39 +300,189 @@ def draw(ctx, storage):
     plt.show()
 
 
+def get_missing_segments(edges):
+    segments = {}
+    nodes = list(chain(*edges))
+    most_common_nodes = Counter(nodes).most_common()
+    node_iter = iter(most_common_nodes)
+    processed = set()
+    not_processed = set(edges)
+    while not_processed:
+        # from time import sleep
+        # sleep(3)
+        # print("N", not_p,"P", proc, "A", node, "M", most_common_nodes)
+        left = set()
+        right = set()
+        node, _ = next(node_iter)
+        for a, b in not_processed:
+            if node == a:
+                left.add(b)
+                processed.add((a, b))
+            elif node == b:
+                right.add(a)
+                processed.add((a, b))
+        not_processed -= processed
+        segments.update({node: right.union(left)})
+
+    return segments
+
+
+def print_topology(topology):
+    # in general the topology's second level (y1x*) should be there always
+    topo_width = len(topology[1])
+    for level in topology:
+        if len(topology[level]) == 1:
+            ws = "".join(["\t" for _ in range(int(topo_width/2))])
+            line = f"{ws}{topology[level][0]}"
+        else:
+            line = "\t".join(topology[level])
+        print(line)
+
+
 @graphcli.command()
-@click.option("-o", "--output", default="./topology_playbook")
 @click.option("-d", "--out-dir", default="./FILES")
-@click.option("-t", "--template", default="../data/inventory_template.j2")  # FIXME
 @click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option(
+    "-j", "--jenkins-template", type=click.Path(exists=True),
+    default=os.path.join(
+        SCALING_DEFAULTS,
+        "jenkinsjob.j2"
+    ),
+    help="Jenkinsfile jinja2 template", show_default=True
+)  # FIXME paths ^^^
+@click.option(
+    "--base-metadata", type=click.Path(exists=True),
+    default=os.path.join(
+        SCALING_DEFAULTS,
+        "metadata_template.j2"
+    ),
+    help="Base metadata jinja2 template", show_default=True
+)
+@click.option(
+    "--inventory", type=click.Path(exists=True),
+    default=os.path.join(
+        SCALING_DEFAULTS,
+        "inventory_template.j2"
+    ),
+    help="Base inventory jinja2 template", show_default=True
+)
+@click.option(
+    "--ansible-install", type=click.Path(exists=True),
+    default=os.path.join(
+        SCALING_DEFAULTS,
+        "install_primary_replicas.j2"
+    ),
+    help="Ansible-freeipa install jinja2 template", show_default=True
+)
+@click.option(
+    "--controller", type=click.Path(exists=True),
+    default=os.path.join(
+        SCALING_DEFAULTS,
+        "controller.j2"
+    ),
+    help="Controller metadata file jinja2 template", show_default=True
+)
+@click.option(
+    "--out-dir", "-o",
+    type=str, default="FILES",
+    help="Output directory to store generated data"
+)
+@click.option(
+    "--metadata-storage",
+    type=str, default="idm-artifacts.usersys.redhat.com",
+    help="Metadata storage server"
+)
+@click.option(
+    "--idm-ci",
+    type=str,
+    default="https://gitlab.cee.redhat.com/identity-management/idm-ci.git",  # FIXME
+    help="IDM-CI repo"
+)
+@click.option(
+    "--repo-branch",
+    type=str,
+    default="master",
+    help="IDM-CI repo branch"
+)
+@click.option(
+    "--tool-repo",
+    type=str,
+    default="https://gitlab.cee.redhat.com/identity-management/idm-performance-testing.git",  # FIXME
+    help="SCALE tool repo"
+)
+@click.option(
+    "--tool-branch",
+    type=str,
+    default="master",
+    help="SCALE tool repo branch"
+)
+@click.option(
+    "--node-os",
+    type=str,
+    default="fedora-33",
+    help="Host operating system"
+)
+@click.option(
+    "--project", "-p",
+    type=str, default="trigger_performance_scale/large-scale",
+    help="Pipeline project for storing data"
+)
+@click.option(
+    "--run", "-r",
+    type=str, default="RUNNING",
+    help="Pipeline run for storing data"
+)
+@click.option(
+    "--job", "-j",
+    type=str, default="JOB",
+    help="Pipeline job for storing data"
+)
+@click.option(
+    "--freeipa-upstream-copr",
+    type=str,
+    help="freeipa-upstream-copr"
+)
+@click.option(
+    "--freeipa-downstream-copr",
+    type=str,
+    help="freeipa-downstream-copr"
+)
+@click.option(
+    "--freeipa-custom-repo",
+    type=str,
+    help="freeipa-custom-repo"
+)
+@click.option(
+    "--ansible-freeipa-upstream-copr",
+    type=str,
+    help="ansible-freeipa-upstream-copr"
+)
+@click.option(
+    "--ansible-freeipa-downstream-copr",
+    type=str,
+    help="ansible-freeipa-downstream-copr"
+)
+@click.option(
+    "--ansible-freeipa-custom-repo",
+    type=str,
+    help="ansible-freeipa-custom-repo"
+)
 @click.pass_context
-def inventory(ctx, storage, out_dir, template, output):
+def jenkins_topology(
+    ctx, jenkins_template, out_dir, storage, node_os,
+    idm_ci, repo_branch, tool_repo, tool_branch, project, run, job,
+    metadata_storage, base_metadata, inventory, ansible_install, controller,
+    freeipa_upstream_copr, freeipa_downstream_copr, freeipa_custom_repo,
+    ansible_freeipa_upstream_copr, ansible_freeipa_downstream_copr,
+    ansible_freeipa_custom_repo,
+):
     ctx = load_context(ctx, storage)
 
     try:
-        pred = ctx.obj[PRED]
         levels = ctx.obj[LEVELS]
-    except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
-
-    print(f"Create temporary {out_dir} folder")
-    os.makedirs(out_dir, exist_ok=True)
-
-    print(levels, pred)
-
-
-@graphcli.command()
-@click.option("-o", "--output", default="./graph_inventory")
-@click.option("-d", "--out-dir", default="./FILES")
-@click.option("-t", "--template", default="../data/jenkinsjob.j2")  # FIXME
-@click.option("-s", "--storage", default="./.graph_storage.json")
-@click.pass_context
-def jenkinsjob(ctx, output, template, out_dir, storage):
-    ctx = load_context(ctx, storage)
-
-    try:
-        levels = ctx.obj[LEVELS]
+        backbone_edges = ctx.obj[BACKBONE]
+        G = ctx.obj[GRAPH_NX]
+        predecessors = ctx.obj[PRED]
     except KeyError:
         print("Please load or generate the topology first.")
         exit(1)
@@ -342,25 +491,81 @@ def jenkinsjob(ctx, output, template, out_dir, storage):
     os.makedirs(out_dir, exist_ok=True)
 
     print("Generate Jenkinsfile for whole topology")
-    # output_jenkins_job = os.path.join(out_dir, output)
+    output_jenkins_job = os.path.join(out_dir, "Jenkinsfile")
 
-    # jenkinsfile = jenkins_template.render(
-    #     levels=levels,
-    #     node_os=node_os,
-    #     idm_ci=idm_ci,
-    #     repo_branch=repo_branch,
-    #     metadata_storage=metadata_storage,
-    #     project=project,
-    #     run=run,
-    #     job=job,
-    #     freeipa_upstream_copr=freeipa_upstream_copr,
-    #     freeipa_downstream_copr=freeipa_downstream_copr,
-    #     freeipa_custom_repo=freeipa_custom_repo,
-    #     ansible_freeipa_upstream_copr=ansible_freeipa_upstream_copr,
-    #     ansible_freeipa_downstream_copr=ansible_freeipa_downstream_copr,
-    #     ansible_freeipa_custom_repo=ansible_freeipa_custom_repo
-    # )
-    # save_data(output_jenkins_job, jenkinsfile)
+    pipeline_template = load_jinja_template(jenkins_template)
+
+    jenkinsfile = pipeline_template.render(
+        levels=levels,
+        node_os=node_os,
+        idm_ci=idm_ci,
+        repo_branch=repo_branch,
+        metadata_storage=metadata_storage,
+        project=project,
+        run=run,
+        job=job,
+        freeipa_upstream_copr=freeipa_upstream_copr,
+        freeipa_downstream_copr=freeipa_downstream_copr,
+        freeipa_custom_repo=freeipa_custom_repo,
+        ansible_freeipa_upstream_copr=ansible_freeipa_upstream_copr,
+        ansible_freeipa_downstream_copr=ansible_freeipa_downstream_copr,
+        ansible_freeipa_custom_repo=ansible_freeipa_custom_repo
+    )
+    save_data(output_jenkins_job, jenkinsfile)
+
+    print_topology(levels)
+    # merge dictionary items to one list containing all nodes
+    topo_nodes = list(chain(*[levels[level] for level in levels]))
+
+    print("Generate metadata for each topology node")
+    # Load jinja teplate
+    metadata_template = load_jinja_template(base_metadata)
+
+    # Generate the metadata files for each node inside of FILES directory
+    # gen_metadata(template, "y0") etc.
+    for node in topo_nodes:
+        gen_metadata(node, node_os, out_dir,
+                     project, run, job,
+                     metadata_template,
+                     tool_repo, tool_branch)
+
+    print("Generate ansible-freeipa inventory file")
+    # Load jinja teplate
+    job_inventory = load_jinja_template(inventory)
+
+    # Generate ansible-freeipa inventory file
+    outpujob_inventory = os.path.join(out_dir, "perf-inventory")
+    inventoryfile = job_inventory.render(master_server=topo_nodes[0],
+                                         levels=levels,
+                                         predecessors=predecessors)
+    save_data(outpujob_inventory, inventoryfile)
+
+    print("Generate ansible-freeipa install file")
+    missing_edges = set(G.edges) - set(backbone_edges)
+
+    segments = get_missing_segments(missing_edges)
+    # Load jinja teplate
+    ansible_install = load_jinja_template(ansible_install)
+    # Generate ansible-freeipa install file
+    output_install = os.path.join(out_dir, "perf-install.yml")
+    installfile = ansible_install.render(levels=levels,
+                                         missing=segments)
+    save_data(output_install, installfile)
+
+    print("Generate controler metadata")
+    controller_templ = load_jinja_template(controller)
+    # Generate controler metadata
+    controler_file = controller_templ.render(
+        metadata_storage=metadata_storage,
+        node_os=node_os,
+        project=project,
+        run=run,
+        job=job,
+        tool_repo=tool_repo,
+        tool_branch=tool_branch,
+    )
+    output_controller = os.path.join(out_dir, "controller.yaml")
+    save_data(output_controller, controler_file)
 
 
 def compatible_backbone_edges(G, master):
@@ -380,7 +585,6 @@ def compatible_backbone_edges(G, master):
 
 @graphcli.command()
 @click.option("-o", "--output", default="./topology_playbook")
-@click.option("-d", "--out-dir", default="./FILES")
 @click.option("-t", "--template", default="../data/inventory_template.j2")  # FIXME
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
@@ -401,12 +605,7 @@ def playbooks(ctx, storage, out_dir, template, output):
 
     missing_edges = all_edges.difference(backbone_edges)
 
-    # print(all_edges, len(all_edges))
-    # print(backbone_edges, len(backbone_edges))
-    # print(missing_edges, len(missing_edges))
-
     missing = nx.Graph()
-    # print(dir(missing))
     missing.name = "Graph with red missing edges from backbone"
     missing.add_edges_from(backbone_edges, color="black")
     missing.add_edges_from(missing_edges, color="red")
@@ -428,7 +627,6 @@ def playbooks(ctx, storage, out_dir, template, output):
         EDGES: all_edges,
     }
 
-    # print(res)
     plt.show()
 
     return res
