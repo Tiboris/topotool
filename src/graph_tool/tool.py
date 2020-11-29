@@ -738,8 +738,6 @@ def analyze(ctx, storage, output):
         if not art_points:
             # no points left to take care of from previous cycle
             art_points = list(nx.articulation_points(G))
-            if not art_points:
-                break
 
         art_point = art_points.pop()
 
