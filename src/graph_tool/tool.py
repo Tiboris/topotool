@@ -661,7 +661,6 @@ def sort_by_degree(G, nodes, reverse=False):
             )
         except KeyError:
             pass
-            # sorted_nodes[degree] = []
 
     return sorted_nodes
 
@@ -685,42 +684,61 @@ def analyze(ctx, storage, output):
     print("Connected components:\t" + str(nx.number_connected_components(G)))
     print("---------------------------------------")
     print("Analyzing nodes as standalone entity...")
+    print("---------------------------------------")
+    print("ISSUE\t\t\t\t\t| NODE")
+    print("-----\t\t\t\t\t| ----")
     for node in G:
         repl_agreements = nx.degree(G, node)
+
         if repl_agreements < 2:
-            print(f"{node}:\tWarning - less than 2 replication agreemenst")
+            print(f"Less than 2 replication agreemenst\t| {node}")
 
         if repl_agreements > 4:
-            print(f"{node}:\tWarning - more than 4 replication agreemenst")
+            print(f"More than 4 replication agreemenst\t| {node}")
+
     print("---------------------------------------")
     print("Analyzing topology connectivity...")
+    print("---------------------------------------")
+    print("Looking for articulation points...")
 
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
     for art_point in art_points:
-        print(f"{art_point}: Warning - Articulation point")
-
-    print("")
-    print("")
-    print("")
-    print("")
+        print(f"Articulation point\t| {art_point}")
 
     components = list(nx.biconnected_components(G))
 
-    for comp in components:
-        print(f"{comp}:\tBiconected component")
+    if art_points:
+        print(f"Articulation point(s) found: {len(art_points)}")
+        print("---------------------------------------")
+        print("Looking for biconected components...")
 
-    print("")
-    print("")
-    print("")
-    print("")
+        for comp in components:
+            print(f"Biconected component: {comp}")
 
-    for edgs in list(nx.biconnected_component_edges(G)):
-        print("Biconected component edges:")
-        for edge in edgs:
-            print(edge)
+        print(f"Biconected component(s) found: {len(components)}")
+
+    print("---------------------------------------")
+
+
+@graphcli.command()
+@click.option("-o", "--output", default="./topology_playbook")
+@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.pass_context
+def fixup(ctx, storage, output):
+    ctx = load_context(ctx, storage)
+
+    try:
+        G = ctx.obj[GRAPH_NX]
+        # master = ctx.obj[MASTER]
+    except KeyError:
+        print("Please load or generate the topology first.")
+        exit(1)
 
     candidates = []
     newG = nx.Graph()
+
+    art_points = sorted(list(nx.articulation_points(G)), reverse=True)
+    components = list(nx.biconnected_components(G))
 
     print("================================================")
 
@@ -734,7 +752,6 @@ def analyze(ctx, storage, output):
             # if there are no articulation points we stop
             break
 
-        print("POINT", art_points)
         if not art_points:
             # no points left to take care of from previous cycle
             art_points = list(nx.articulation_points(G))
@@ -780,42 +797,6 @@ def analyze(ctx, storage, output):
             colors.append(G[u][v]["color"])
         except KeyError:
             colors.append("black")
-
-    print("================================================")
-
-    print("---------------------------------------")
-    print("General graph information:\n" + str(nx.info(G)))
-    print("Connected components:\t" + str(nx.number_connected_components(G)))
-    print("---------------------------------------")
-    print("Analyzing nodes as standalone entity...")
-    for node in G:
-        repl_agreements = nx.degree(G, node)
-        if repl_agreements < 2:
-            print(f"{node}:\tWarning - less than 2 replication agreemenst")
-
-        if repl_agreements > 4:
-            print(f"{node}:\tWarning - more than 4 replication agreemenst")
-    print("---------------------------------------")
-    print("Analyzing topology connectivity...")
-
-    art_points = sorted(list(nx.articulation_points(G)), reverse=True)
-    for art_point in art_points:
-        print(f"{art_point}: Warning - Articulation point")
-
-    print("")
-    print("")
-    print("")
-    print("")
-
-    components = list(nx.biconnected_components(G))
-
-    for comp in components:
-        print(f"{comp}:\tBiconected component")
-
-    print("")
-    print("")
-    print("")
-    print("")
 
     nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
     plt.show()
