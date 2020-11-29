@@ -156,12 +156,14 @@ def predecessors_from_first_levels(levels):
 
 @graphcli.command()
 @click.argument("input_file")
-@click.option("-d", "--delimiter", default="-")
-@click.option("-w", "--weight-delimiter", default="")
 @click.option("-m", "--master", default="y0")
 @click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option(
+    "-t", "--type", "data_format", default="ipa",
+    type=click.Choice(["ipa", "edges"]),
+)
 @click.pass_context
-def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
+def load(ctx, input_file, data_format, master, storage):
     """Loads grap data to dictionary"""
     ctx.ensure_object(dict)
 
@@ -169,9 +171,10 @@ def load(ctx, input_file, delimiter, weight_delimiter, master, storage):
         ctx.obj[GRAPH_DATA] = f.read().splitlines()
 
     data = deepcopy(ctx.obj[GRAPH_DATA])
-    graph_data = Graph(
-        data, delimiter=delimiter, weight_delim=weight_delimiter
-    )
+    graph_data = Graph(data, data_format=data_format)
+
+    print(graph_data.edge_list)
+
     ctx.obj[GRAPH_OBJECT] = graph_data
 
     G = nx.Graph()
