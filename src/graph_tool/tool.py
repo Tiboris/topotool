@@ -37,10 +37,10 @@ def load_context(ctx, storage):
                 ctx.obj[GRAPH_DATA] = db[GRAPH_DATA]
                 ctx.obj[GRAPH_OBJECT] = db[GRAPH_OBJECT]
                 ctx.obj[GRAPH_NX] = db[GRAPH_NX]
-                ctx.obj[LEVELS] = db[LEVELS]
-                ctx.obj[PRED] = db[PRED]
                 ctx.obj[MASTER] = db[MASTER]
                 ctx.obj[EDGES] = db[EDGES]
+                ctx.obj[LEVELS] = db[LEVELS]
+                ctx.obj[PRED] = db[PRED]
                 ctx.obj[BACKBONE] = db[BACKBONE]
         except KeyError:
             pass
@@ -173,58 +173,20 @@ def load(ctx, input_file, data_format, master, storage):
     data = deepcopy(ctx.obj[GRAPH_DATA])
     graph_data = Graph(data, data_format=data_format)
 
-    print(graph_data.edge_list)
+    # print(graph_data.edge_list)
 
     ctx.obj[GRAPH_OBJECT] = graph_data
 
     G = nx.Graph()
-    G.name = "Complete graph of topology"
+    G.name = f"Loaded graph of topology from {input_file}"
     for vertex in graph_data.vertices:
         G.add_node(vertex)
 
     G.add_edges_from(graph_data.edge_list)
+
     ctx.obj[GRAPH_NX] = G
-
-    all_successors = list(nx.bfs_successors(G, master))
-
-    levels = levels_from_fist_successors(all_successors[:1])
-    successors = all_successors[1:]
-
-    new = []
-    predecessors = predecessors_from_first_levels(levels)
-
-    for s, f in successors:
-        # print("------------------------------------")
-        # print("s:", s, "f:", f, "level:", levels[-1])
-        if s in levels[-1]:
-            # print(s, f)
-            new = new + f
-            # print("+")
-        else:
-            # print(s, f)
-            # print("next", f, "level:", new)
-            # print("before", levels)
-            levels.append(new)
-            # print("afeter", levels)
-            new = f
-        for pred in f:
-            predecessors[pred] = s
-
-    if new:  # add level at the end of for cycle so last is added
-        levels.append(new)
-
-    key = 0
-    level_dict = {}
-    for level in levels:
-        level_dict[key] = level
-        # print(level)
-        key += 1
-
-    ctx.obj[LEVELS] = level_dict
-    ctx.obj[PRED] = predecessors
     ctx.obj[MASTER] = master
-    ctx.obj[BACKBONE] = compatible_backbone_edges(G, master)
-    ctx.obj[EDGES] = set(G.edges)
+
     print("Loading of topology done.")
 
     with shelve.open(storage) as db:
@@ -272,13 +234,13 @@ def generate(ctx, storage, branches, length, nodes, master):
     ctx.obj[GRAPH_NX] = G
     ctx.obj[GRAPH_DATA] = None
 
-    ctx.obj[LEVELS] = topo["levels"]
+    # ctx.obj[LEVELS] = topo["levels"]
 
-    ctx.obj[PRED] = topo["predecessors"]
+    # ctx.obj[PRED] = topo["predecessors"]
     ctx.obj[MASTER] = master
-    ctx.obj[BACKBONE] = compatible_backbone_edges(G, master)
+    # ctx.obj[BACKBONE] = compatible_backbone_edges(G, master)
 
-    ctx.obj[EDGES] = topo["edges"]
+    # ctx.obj[EDGES] = topo["edges"]
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
@@ -325,7 +287,9 @@ def get_missing_segments(edges):
                 right.add(a)
                 processed.add((a, b))
         not_processed -= processed
-        segments.update({node: right.union(left)})
+
+        if right.union(left):
+            segments.update({node: right.union(left)})
 
     return segments
 
@@ -480,15 +444,55 @@ def jenkins_topology(
     ansible_freeipa_custom_repo,
 ):
     ctx = load_context(ctx, storage)
-
+    print()
     try:
-        levels = ctx.obj[LEVELS]
-        backbone_edges = ctx.obj[BACKBONE]
         G = ctx.obj[GRAPH_NX]
-        predecessors = ctx.obj[PRED]
+        master = ctx.obj[MASTER]
     except KeyError:
         print("Please load or generate the topology first.")
         exit(1)
+
+    all_successors = list(nx.bfs_successors(G, master))
+    levels = levels_from_fist_successors(all_successors[:1])
+    successors = all_successors[1:]
+
+    new = []
+    predecessors = predecessors_from_first_levels(levels)
+
+    for s, f in successors:
+        # print("------------------------------------")
+        # print("s:", s, "f:", f, "level:", levels[-1])
+        if s in levels[-1]:
+            # print(s, f)
+            new = new + f
+            # print("+")
+        else:
+            # print(s, f)
+            # print("next", f, "level:", new)
+            # print("before", levels)
+            levels.append(new)
+            # print("afeter", levels)
+            new = f
+        for pred in f:
+            predecessors[pred] = s
+
+    if new:  # add level at the end of for cycle so last is added
+        levels.append(new)
+
+    key = 0
+    levels_dict = {}
+    for level in levels:
+        levels_dict[key] = level
+        # print(level)
+        key += 1
+
+    backbone_edges = compatible_backbone_edges(G, master)
+    ctx.obj[LEVELS] = levels_dict
+    ctx.obj[PRED] = predecessors
+    ctx.obj[BACKBONE] = backbone_edges
+    ctx.obj[EDGES] = set(G.edges)
+
+    levels = levels_dict
 
     print(f"Create temporary {out_dir} folder")
     os.makedirs(out_dir, exist_ok=True)
@@ -584,55 +588,6 @@ def compatible_backbone_edges(G, master):
             backbone_edges.add((e[1], e[0]))
 
     return backbone_edges
-
-
-@graphcli.command()
-@click.option("-o", "--output", default="./topology_playbook")
-@click.option("-t", "--template", default="../data/inventory_template.j2")  # FIXME
-@click.option("-s", "--storage", default="./.graph_storage.json")
-@click.pass_context
-def playbooks(ctx, storage, out_dir, template, output):
-    ctx = load_context(ctx, storage)
-
-    try:
-        pred = ctx.obj[PRED]
-        levels = ctx.obj[LEVELS]
-        backbone_edges = ctx.obj[BACKBONE]
-        all_edges = ctx.obj[EDGES]
-    except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
-
-    print(f"Create temporary {out_dir} folder")
-    os.makedirs(out_dir, exist_ok=True)
-
-    missing_edges = all_edges.difference(backbone_edges)
-
-    missing = nx.Graph()
-    missing.name = "Graph with red missing edges from backbone"
-    missing.add_edges_from(backbone_edges, color="black")
-    missing.add_edges_from(missing_edges, color="red")
-    colors = [missing[u][v]['color'] for u, v in missing.edges()]
-
-    with shelve.open(storage) as db:
-        for key in ctx.obj:
-            db[key] = ctx.obj[key]
-
-    nx.draw(missing, with_labels=True, font_weight='bold', edge_color=colors)
-    # nx.draw_planar(
-    #     missing, with_labels=True, font_weight='bold', edge_color=colors
-    # )
-
-    res = {
-        LEVELS: levels,
-        PRED: pred,
-        BACKBONE: backbone_edges,
-        EDGES: all_edges,
-    }
-
-    plt.show()
-
-    return res
 
 
 def add_list_item(record, item):
@@ -735,7 +690,6 @@ def fixup(ctx, storage, output):
         exit(1)
 
     candidates = []
-    newG = nx.Graph()
 
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
     components = list(nx.biconnected_components(G))
@@ -743,11 +697,9 @@ def fixup(ctx, storage, output):
     print("================================================")
 
     # trying to remove articulation points
-    while not nx.is_isomorphic(G, newG):
-        if not len(newG):
-            # at first we add edges to new Graph from actual one
-            newG.add_edges_from(G.edges)
+    added_edges = []
 
+    while True:
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we stop
             break
@@ -772,7 +724,8 @@ def fixup(ctx, storage, output):
             min_degree = min(sorted_nodes, key=int)
 
             if min_degree < 4:
-                candidates.append(sorted_nodes[min_degree][0])
+                print(sorted(sorted_nodes[min_degree]))
+                candidates.append(sorted(sorted_nodes[min_degree])[0])
             else:
                 nx.draw(G, with_labels=True, font_weight='bold')
                 plt.show()
@@ -790,6 +743,15 @@ def fixup(ctx, storage, output):
                 right = candidates[-1]
                 edges_to_add.append((left, right))
                 G.add_edges_from(edges_to_add, color="green")
+                added_edges += edges_to_add
+
+    print("---------------------------------------")
+    print("Added edges:")
+    for edge in added_edges:
+        print(edge)
+
+    print(f"Added edge(s) count: {len(added_edges)}")
+    print("---------------------------------------")
 
     colors = []
     for u, v in G.edges():
@@ -800,6 +762,21 @@ def fixup(ctx, storage, output):
 
     nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
     plt.show()
+
+    # we ecpect that previous cycle got newG to be same as G
+    newG = nx.Graph()
+    newG.add_edges_from(G.edges)
+    assert nx.is_isomorphic(G, newG)
+
+    while nx.is_isomorphic(G, newG):
+        break
+
+    # save new graph
+    ctx.obj[GRAPH_NX] = G
+    with shelve.open(storage) as db:
+        for key in ctx.obj:
+            db[key] = ctx.obj[key]
+
 
 
 if __name__ == "__main__":

@@ -132,14 +132,14 @@ class Graph:
                 continue
 
             key, value = line.split(": ")
-            print(key, value)
+            # print(key, value)
             if key == "Left node":
                 left_node = value
-                print("found:", left_node)
+                # print("found:", left_node)
 
             if key == "Right node":
                 right_node = value
-                print("found:", right_node)
+                # print("found:", right_node)
 
             if key == "Connectivity":
                 if value == "both":
@@ -154,7 +154,7 @@ class Graph:
                     )
                     self.vertices[left_node].connect(right_node)
                     self.vertices[right_node].connect(left_node)
-                    print("connecting", left_node, right_node)
+                    # print("connecting", left_node, right_node)
                     left_node = ""
                     right_node = ""
                     segments_cnt += 1
