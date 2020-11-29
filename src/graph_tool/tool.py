@@ -734,10 +734,12 @@ def analyze(ctx, storage, output):
             # if there are no articulation points we stop
             break
 
+        print("POINT", art_points)
         if not art_points:
-            # if there are no articulation points left to take care of
-            # art_points = list(nx.articulation_points(G))
-            break
+            # no points left to take care of from previous cycle
+            art_points = list(nx.articulation_points(G))
+            if not art_points:
+                break
 
         art_point = art_points.pop()
 
@@ -757,23 +759,22 @@ def analyze(ctx, storage, output):
             if min_degree < 4:
                 candidates.append(sorted_nodes[min_degree][0])
             else:
+                nx.draw(G, with_labels=True, font_weight='bold')
+                plt.show()
                 raise Error(
-                    "Error: Can not add edge to component with nodes "
-                    "that have 4 or more replication agreements."
+                    f"Error: Can not add edge to component ({comp}) with nodes "
+                    f"that have 4 or more replication agreements ({min_degree})."
                 )
 
-            # print("candidate:", candidates, "will connect", comp)
+            # if you can just connect and remember right node as new left
 
-        edges_to_add = []
-        left = candidates.pop()
-        right = ""
-        while candidates:
-            right = candidates.pop()
-            # print(left, right)
-            edges_to_add.append((left, right))
-            left = right
+            edges_to_add = []
 
-        G.add_edges_from(edges_to_add, color="green")
+            if len(candidates) >= 2:
+                left = candidates[-2]
+                right = candidates[-1]
+                edges_to_add.append((left, right))
+                G.add_edges_from(edges_to_add, color="green")
 
     colors = []
     for u, v in G.edges():
