@@ -638,40 +638,48 @@ def analyze(ctx, storage, output):
         print("Please load or generate the topology first.")
         exit(1)
 
-    print("---------------------------------------")
+    print("----------------------------------------")
     print("General graph information:\n" + str(nx.info(G)))
     print("Connected components:\t" + str(nx.number_connected_components(G)))
-    print("---------------------------------------")
+    print("----------------------------------------")
     print("Analyzing nodes as standalone entity...")
-    print("---------------------------------------")
-    print("ISSUE\t\t\t\t\t| NODE")
-    print("-----\t\t\t\t\t| ----")
+    print("--------------------")
+    issues = []
     for node in G:
         repl_agreements = nx.degree(G, node)
 
         if repl_agreements < 2:
-            print(f"Less than 2 replication agreemenst\t| {node}")
+            issues.append(f"Less than 2 replication agreemenst\t| {node}")
 
         if repl_agreements > MAX_REPL_AGREEMENTS:
-            print(
+            issues.append(
                 f"More than {MAX_REPL_AGREEMENTS} "
                 f"replication agreemenst\t| {node}"
             )
 
-    print("---------------------------------------")
+    if issues:
+        print("ISSUE\t\t\t\t\t| NODE")
+        print("-----\t\t\t\t\t| ----")
+        for issue in issues:
+            print(issue)
+    else:
+        print("No issues found for the nodes.")
+
+    print("----------------------------------------")
     print("Analyzing topology connectivity...")
-    print("---------------------------------------")
+    print("--------------------")
     print("Looking for articulation points...")
 
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
-    for art_point in art_points:
-        print(f"Articulation point\t| {art_point}")
 
     components = list(nx.biconnected_components(G))
 
-    if art_points:
+    if art_points or components:
+        for art_point in art_points:
+            print(f"Articulation point\t| {art_point}")
+
         print(f"Articulation point(s) found: {len(art_points)}")
-        print("---------------------------------------")
+        print("--------------------")
         print("Looking for biconected components...")
 
         for comp in components:
@@ -679,7 +687,7 @@ def analyze(ctx, storage, output):
 
         print(f"Biconected component(s) found: {len(components)}")
 
-    print("---------------------------------------")
+    print("----------------------------------------")
 
 
 @graphcli.command()
@@ -752,13 +760,13 @@ def fixup(ctx, storage, output):
                 G.add_edges_from(edges_to_add, color="green")
                 added_edges += edges_to_add
 
-    print("---------------------------------------")
+    print("----------------------------------------")
     print("Added edges:")
     for edge in added_edges:
         print(edge)
 
     print(f"Added edge(s) count: {len(added_edges)}")
-    print("---------------------------------------")
+    print("----------------------------------------")
 
     colors = []
     for u, v in G.edges():
@@ -767,13 +775,11 @@ def fixup(ctx, storage, output):
         except KeyError:
             colors.append("black")
 
-    removed = [(None, None)]
+    removed = []
     can_not_remove = []
+    remove = set()
 
     while True:
-        # from IPython import embed
-        # embed()
-
         # sort the G nodes by degree once!
         sorted_nodes = sort_by_degree(G)
 
@@ -787,27 +793,41 @@ def fixup(ctx, storage, output):
 
         for max_degree_node in sorted_nodes[max_degree]:
             print("maxdnode:", max_degree_node)
-            neighbors = sorted(n for n in G.neighbors(max_degree_node))
+            neighbors = sorted(
+                [n for n in G.neighbors(max_degree_node)]
+            )
             print("neigh", neighbors)
 
-            sort_neig = sorted(
-                sort_by_degree(G, nodes=neighbors), reverse=True
-            )
+            sort_neig_dict = sort_by_degree(G, nodes=neighbors)
 
+            print("sorted neig:", sort_neig_dict)
+
+            sort_neig = sorted(sort_neig_dict, reverse=True)
             print("sorted neig:", sort_neig)
 
-            remove = removed[-1]
+            remove = removed[-1] if removed else remove
 
-            for neig in sorted_nodes[sort_neig[0]]:
+            for neig in sort_neig_dict[sort_neig[0]]:
                 to_remove = (max_degree_node, neig)
 
                 if to_remove not in can_not_remove:
                     remove = to_remove
+                    break  # commenting this will help to create art point
+
+                if remove not in G.edges:
+                    # should not happen at all
+                    print("Warning edge missing, skipping", remove)
                     continue
 
-                if remove in removed:
-                    print("already removed", remove)
-                    exit(9)
+            if remove in can_not_remove:
+                print("Error: Tried to repetatively remove:", remove)
+                print("Stopping...")
+                break
+
+            if remove in removed:
+                print("Error: removed:", remove)
+                print("Stopping...")
+                break
 
             print("to_remove:", remove)
 
@@ -826,10 +846,23 @@ def fixup(ctx, storage, output):
                 # if there are no articulation points we continue removing
                 continue
             else:
-                print("removing", removed[-1], "caused articulation point, adding back")
+                print(
+                    "Removal of the", removed[-1], "edge created "
+                    "articulation point, adding back..."
+                )
                 G.add_edge(removed[-1][0], removed[-1][1])
                 can_not_remove.append(removed[-1])
                 print("can_not", can_not_remove)
+
+        if remove not in removed:
+            print("Error: ", remove)
+            print("Stopping...")
+            break
+
+    print("Added edges", set(added_edges))
+    print("Removed edges", set(removed))
+    # Difference should be empty
+    print("Difference:", set(added_edges).intersection(set(removed)))
 
     print("Done")
     nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
