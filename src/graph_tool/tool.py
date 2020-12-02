@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+from re import L
 import click
 import sys
 import shelve
@@ -9,14 +10,13 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
-from os import pipe
 from collections import Counter, OrderedDict
 from graph_tool.graphs import Graph
 from copy import Error, deepcopy
-from matplotlib.pyplot import colorbar
 from jinja2 import Template
 from itertools import chain
 
+MAX_REPL_AGREEMENTS = 4
 
 GRAPH_DATA = "graph_input_data"
 GRAPH_OBJECT = "graph_object"
@@ -598,9 +598,13 @@ def add_list_item(record, item):
     return record
 
 
-def sort_by_degree(G, nodes, reverse=False):
+def sort_by_degree(G, nodes=None, reverse=False):
     sorted_nodes = OrderedDict()
     nodes_by_degree = {}
+
+    if not nodes:
+        nodes = G
+
     for node in nodes:
         cnt = nx.degree(G, node)
         try:
@@ -648,8 +652,11 @@ def analyze(ctx, storage, output):
         if repl_agreements < 2:
             print(f"Less than 2 replication agreemenst\t| {node}")
 
-        if repl_agreements > 4:
-            print(f"More than 4 replication agreemenst\t| {node}")
+        if repl_agreements > MAX_REPL_AGREEMENTS:
+            print(
+                f"More than {MAX_REPL_AGREEMENTS} "
+                f"replication agreemenst\t| {node}"
+            )
 
     print("---------------------------------------")
     print("Analyzing topology connectivity...")
@@ -719,12 +726,12 @@ def fixup(ctx, storage, output):
 
             # we would pick node with the lowest degree to add edge to
 
-            sorted_nodes = sort_by_degree(G, comp, reverse=True)
+            sorted_nodes = sort_by_degree(G, nodes=comp, reverse=True)
 
             min_degree = min(sorted_nodes, key=int)
 
-            if min_degree < 4:
-                print(sorted(sorted_nodes[min_degree]))
+            if min_degree < MAX_REPL_AGREEMENTS:
+                # print(sorted(sorted_nodes[min_degree]))
                 candidates.append(sorted(sorted_nodes[min_degree])[0])
             else:
                 nx.draw(G, with_labels=True, font_weight='bold')
@@ -760,23 +767,78 @@ def fixup(ctx, storage, output):
         except KeyError:
             colors.append("black")
 
+    removed = [(None, None)]
+    can_not_remove = []
+
+    while True:
+        # from IPython import embed
+        # embed()
+
+        # sort the G nodes by degree once!
+        sorted_nodes = sort_by_degree(G)
+
+        # get the max_degree_key to dict
+        max_degree = max(sorted_nodes, key=int)
+        if max_degree <= MAX_REPL_AGREEMENTS:
+            break
+
+        # get the min_degree_key to dict
+        min_degree = min(sorted_nodes, key=int)
+
+        for max_degree_node in sorted_nodes[max_degree]:
+            print("maxdnode:", max_degree_node)
+            neighbors = sorted(n for n in G.neighbors(max_degree_node))
+            print("neigh", neighbors)
+
+            sort_neig = sorted(
+                sort_by_degree(G, nodes=neighbors), reverse=True
+            )
+
+            print("sorted neig:", sort_neig)
+
+            remove = removed[-1]
+
+            for neig in sorted_nodes[sort_neig[0]]:
+                to_remove = (max_degree_node, neig)
+
+                if to_remove not in can_not_remove:
+                    remove = to_remove
+                    continue
+
+                if remove in removed:
+                    print("already removed", remove)
+                    exit(9)
+
+            print("to_remove:", remove)
+
+            # FIXME
+            nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
+            plt.show()
+
+            G.remove_edge(*remove)
+
+            removed.append(remove)
+
+            print("removed:", removed)
+            print("---")
+
+            if len(list(nx.articulation_points(G))) == 0:
+                # if there are no articulation points we continue removing
+                continue
+            else:
+                print("removing", removed[-1], "caused articulation point, adding back")
+                G.add_edge(removed[-1][0], removed[-1][1])
+                can_not_remove.append(removed[-1])
+                print("can_not", can_not_remove)
+
+    print("Done")
     nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
     plt.show()
-
-    # we ecpect that previous cycle got newG to be same as G
-    newG = nx.Graph()
-    newG.add_edges_from(G.edges)
-    assert nx.is_isomorphic(G, newG)
-
-    while nx.is_isomorphic(G, newG):
-        break
-
     # save new graph
     ctx.obj[GRAPH_NX] = G
     with shelve.open(storage) as db:
         for key in ctx.obj:
             db[key] = ctx.obj[key]
-
 
 
 if __name__ == "__main__":
