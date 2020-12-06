@@ -12,11 +12,12 @@ import matplotlib.pyplot as plt
 
 from collections import Counter, OrderedDict
 from graph_tool.graphs import Graph
-from copy import Error, deepcopy
+from copy import deepcopy
 from jinja2 import Template
 from itertools import chain
 
 MAX_REPL_AGREEMENTS = 4
+MIN_REPL_AGREEMENTS = 2
 
 GRAPH_DATA = "graph_input_data"
 GRAPH_OBJECT = "graph_object"
@@ -187,7 +188,7 @@ def load(ctx, input_file, data_format, master, storage):
     ctx.obj[GRAPH_NX] = G
     ctx.obj[MASTER] = master
 
-    print("Loading of topology done.")
+    print("Loading of topology done")
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
@@ -265,7 +266,7 @@ def draw(ctx, storage):
     plt.show()
 
 
-def get_missing_segments(edges):
+def get_segments(edges):
     segments = {}
     nodes = list(chain(*edges))
     most_common_nodes = Counter(nodes).most_common()
@@ -550,7 +551,7 @@ def jenkins_topology(
     print("Generate ansible-freeipa install file")
     missing_edges = set(G.edges) - set(backbone_edges)
 
-    segments = get_missing_segments(missing_edges)
+    segments = get_segments(missing_edges)
     # Load jinja teplate
     ansible_install = load_jinja_template(ansible_install)
     # Generate ansible-freeipa install file
@@ -691,10 +692,13 @@ def analyze(ctx, storage, output):
 
 
 @graphcli.command()
-@click.option("-o", "--output", default="./topology_playbook")
+@click.option(
+    "-h", "--max", "max_repl_agreements", default=MAX_REPL_AGREEMENTS
+)
+@click.option("--omit-max-degree", is_flag=True, default=False)
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
-def fixup(ctx, storage, output):
+def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
     ctx = load_context(ctx, storage)
 
     try:
@@ -725,6 +729,8 @@ def fixup(ctx, storage, output):
 
         art_point = art_points.pop()
 
+        color = "green"  # default added edge color
+
         for comp in components:
             # print("art points:", art_points)
             # print("processing:", art_point)
@@ -738,16 +744,28 @@ def fixup(ctx, storage, output):
 
             min_degree = min(sorted_nodes, key=int)
 
-            if min_degree < MAX_REPL_AGREEMENTS:
+            if min_degree < max_repl_agreements:
                 # print(sorted(sorted_nodes[min_degree]))
                 candidates.append(sorted(sorted_nodes[min_degree])[0])
+                color = "green" if len(candidates) > 2 else color
             else:
-                nx.draw(G, with_labels=True, font_weight='bold')
-                plt.show()
-                raise Error(
-                    f"Error: Can not add edge to component ({comp}) with nodes "
-                    f"that have 4 or more replication agreements ({min_degree})."
+                added = False
+                if omit_max_degree:
+                    candidates.append(sorted(sorted_nodes[min_degree])[0])
+                    color = "orange"
+                    added = True
+
+                added_str = "Added" if added else "Did not add"
+                print(
+                    f"Warning: {added_str} {color} edge to connect component "
+                    f"({comp}) with articulation point {art_point} because it "
+                    f"has {max_repl_agreements} or more replication agreements"
                 )
+                if not added:
+                    print(
+                        "Try adding --omit-max-degree option to add edges "
+                        "even when maximum degree of node is reached"
+                    )
 
             # if you can just connect and remember right node as new left
 
@@ -757,7 +775,7 @@ def fixup(ctx, storage, output):
                 left = candidates[-2]
                 right = candidates[-1]
                 edges_to_add.append((left, right))
-                G.add_edges_from(edges_to_add, color="green")
+                G.add_edges_from(edges_to_add, color=color)
                 added_edges += edges_to_add
 
     print("----------------------------------------")
@@ -779,85 +797,82 @@ def fixup(ctx, storage, output):
     can_not_remove = []
     remove = set()
 
-    while True:
-        # sort the G nodes by degree once!
-        sorted_nodes = sort_by_degree(G)
+    sorted_nodes = sort_by_degree(G)
+    max_degree = max(sorted_nodes, key=int)
 
-        # get the max_degree_key to dict
-        max_degree = max(sorted_nodes, key=int)
-        if max_degree <= MAX_REPL_AGREEMENTS:
+    while max_degree > max_repl_agreements:
+        # sort the G nodes by degree once!
+        sorted_max_degree_nodes = iter(sorted_nodes[max_degree])
+
+        # for max_degree_node in sorted_max_degree_nodes:
+        max_degree_node = next(sorted_max_degree_nodes)
+
+        if max_degree <= max_repl_agreements:
+            print("Topology change done...")
             break
 
-        # get the min_degree_key to dict
-        min_degree = min(sorted_nodes, key=int)
+        neighbors = sorted(
+            [n for n in G.neighbors(max_degree_node)]
+        )
+        print("neighbors:", neighbors)
 
-        for max_degree_node in sorted_nodes[max_degree]:
-            print("maxdnode:", max_degree_node)
-            neighbors = sorted(
-                [n for n in G.neighbors(max_degree_node)]
-            )
-            print("neigh", neighbors)
+        sort_neig_dict = sort_by_degree(G, nodes=neighbors)
 
-            sort_neig_dict = sort_by_degree(G, nodes=neighbors)
+        print("s neig dict:", sort_neig_dict)
 
-            print("sorted neig:", sort_neig_dict)
+        sort_neig = sorted(sort_neig_dict, reverse=True)
+        print("sorted neig:", sort_neig)
 
-            sort_neig = sorted(sort_neig_dict, reverse=True)
-            print("sorted neig:", sort_neig)
+        remove = removed[-1] if removed else remove
 
-            remove = removed[-1] if removed else remove
+        for neig in sort_neig_dict[sort_neig[0]]:
+            to_remove = (max_degree_node, neig)
 
-            for neig in sort_neig_dict[sort_neig[0]]:
-                to_remove = (max_degree_node, neig)
-
-                if to_remove not in can_not_remove:
-                    remove = to_remove
-                    break  # commenting this will help to create art point
-
-                if remove not in G.edges:
-                    # should not happen at all
-                    print("Warning edge missing, skipping", remove)
-                    continue
-
-            if remove in can_not_remove:
-                print("Error: Tried to repetatively remove:", remove)
-                print("Stopping...")
+            if to_remove not in can_not_remove:
+                remove = to_remove
                 break
+                # commenting this break will help to create
+                # art point in the loop file while running
 
-            if remove in removed:
-                print("Error: removed:", remove)
-                print("Stopping...")
-                break
-
-            print("to_remove:", remove)
-
-            # FIXME
-            nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
-            plt.show()
-
-            G.remove_edge(*remove)
-
-            removed.append(remove)
-
-            print("removed:", removed)
-            print("---")
-
-            if len(list(nx.articulation_points(G))) == 0:
-                # if there are no articulation points we continue removing
-                continue
-            else:
-                print(
-                    "Removal of the", removed[-1], "edge created "
-                    "articulation point, adding back..."
-                )
-                G.add_edge(removed[-1][0], removed[-1][1])
-                can_not_remove.append(removed[-1])
-                print("can_not", can_not_remove)
-
-        if remove not in removed:
-            print("Error: ", remove)
+        if remove in can_not_remove:
+            print("Error: Tried to repetatively remove:", remove)
             print("Stopping...")
             break
+
+        if remove in removed:
+            print("Error: Already removed -", remove)
+            print("Stopping...")
+            break
+
+        print("to_remove:", remove)
+
+        # FIXME
+        nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
+        plt.show()
+
+        G.remove_edge(*remove)
+
+        # immidiately after removal recalculate
+        sorted_nodes = sort_by_degree(G)
+        max_degree = max(sorted_nodes, key=int)
+
+        removed.append(remove)
+
+        print("list of removed:", removed)
+        print("---")
+
+        if len(list(nx.articulation_points(G))) == 0:
+            # if there are no articulation points we continue removing
+            print("Continue................")
+            continue
+        else:
+            print(
+                "Removal of the", removed[-1], "edge created "
+                "articulation point, adding back..."
+            )
+            G.add_edge(removed[-1][0], removed[-1][1])
+            can_not_remove.append(removed[-1])
+            print("list to can not remove:", can_not_remove)
 
     print("Added edges", set(added_edges))
     print("Removed edges", set(removed))
@@ -872,6 +887,25 @@ def fixup(ctx, storage, output):
     with shelve.open(storage) as db:
         for key in ctx.obj:
             db[key] = ctx.obj[key]
+
+    missing_segments = get_segments(added_edges)
+    redundant_segments = get_segments(removed)
+
+    print(missing_segments)
+    print(redundant_segments)
+
+    fixup_playbook = load_jinja_template(os.path.join(
+        "../src/graph_tool/data/fixup_topology_segments.j2"
+    ))
+
+    # Generate fixup playbook
+    fixup = "fixup"
+    fixup_data = fixup_playbook.render(
+        missing=missing_segments,
+        redundant=redundant_segments,
+    )
+
+    save_data(fixup, fixup_data)
 
 
 if __name__ == "__main__":
