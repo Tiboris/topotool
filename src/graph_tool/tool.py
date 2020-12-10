@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import os
-from re import L
+
 import click
 import sys
 import shelve
 
-import jinja2
 import networkx as nx
 import matplotlib.pyplot as plt
-
 
 from collections import Counter, OrderedDict
 from graph_tool.graphs import Graph
@@ -717,6 +715,8 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
     # trying to remove articulation points
     added_edges = []
+    can_not_add = []
+    to_add = ""
 
     while True:
         if len(list(nx.articulation_points(G))) == 0:
@@ -744,30 +744,32 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
             min_degree = min(sorted_nodes, key=int)
 
+            to_add = sorted(sorted_nodes[min_degree])[0]
+
             if min_degree < max_repl_agreements:
                 # print(sorted(sorted_nodes[min_degree]))
-                candidates.append(sorted(sorted_nodes[min_degree])[0])
+                candidates.append(to_add)
                 color = "green" if len(candidates) > 2 else color
             else:
                 added = False
                 if omit_max_degree:
-                    candidates.append(sorted(sorted_nodes[min_degree])[0])
+                    candidates.append(to_add)
                     color = "orange"
                     added = True
+                else:
+                    can_not_add.append(to_add)
 
                 added_str = "Added" if added else "Did not add"
                 print(
                     f"Warning: {added_str} {color} edge to connect component "
-                    f"({comp}) with articulation point {art_point} because it "
+                    f"({comp}) with articulation point {art_point} - it "
                     f"has {max_repl_agreements} or more replication agreements"
                 )
-                if not added:
+                if not added and to_add not in can_not_add:
                     print(
                         "Try adding --omit-max-degree option to add edges "
                         "even when maximum degree of node is reached"
                     )
-
-            # if you can just connect and remember right node as new left
 
             edges_to_add = []
 
@@ -777,6 +779,13 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
                 edges_to_add.append((left, right))
                 G.add_edges_from(edges_to_add, color=color)
                 added_edges += edges_to_add
+
+        if to_add in can_not_add:
+            neighs = G.neighbors(to_add)
+            print(f"Unable to add more replication agreements to: {to_add}")
+            for nei in neighs:
+                print(f"{to_add} has neihgbor: {nei}")
+            sys.exit(2)
 
     print("----------------------------------------")
     print("Added edges:")
@@ -836,13 +845,11 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
         if remove in can_not_remove:
             print("Error: Tried to repetatively remove:", remove)
-            print("Stopping...")
-            break
+            sys.exit(3)
 
         if remove in removed:
             print("Error: Already removed -", remove)
-            print("Stopping...")
-            break
+            sys.exit(4)
 
         print("to_remove:", remove)
 
@@ -863,7 +870,6 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we continue removing
-            print("Continue................")
             continue
         else:
             print(
