@@ -9,7 +9,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 from collections import Counter, OrderedDict
-from graph_tool.graphs import Graph
+from topotool.graphs import Graph
 from copy import deepcopy
 from jinja2 import Template
 from itertools import chain
@@ -20,29 +20,31 @@ MIN_REPL_AGREEMENTS = 2
 GRAPH_DATA = "graph_input_data"
 GRAPH_OBJECT = "graph_object"
 GRAPH_NX = "graph_networkx"
-LEVELS = "levels"
-PRED = "predecessors"
-BACKBONE = "backbone_edges"
-EDGES = "edges"
 MASTER = "master_node"
-SCALING_DEFAULTS = "../src/graph_tool/data"
+
+DB_KEYS = [
+    GRAPH_DATA,
+    GRAPH_OBJECT,
+    GRAPH_NX,
+    MASTER,
+]
+
+SCALING_DEFAULTS = os.path.join(
+    os.path.dirname(__file__),
+    "./data/"
+)
 
 
 def load_context(ctx, storage):
     ctx.ensure_object(dict)
     if not ctx.obj:
-        try:
-            with shelve.open(storage) as db:
-                ctx.obj[GRAPH_DATA] = db[GRAPH_DATA]
-                ctx.obj[GRAPH_OBJECT] = db[GRAPH_OBJECT]
-                ctx.obj[GRAPH_NX] = db[GRAPH_NX]
-                ctx.obj[MASTER] = db[MASTER]
-                ctx.obj[EDGES] = db[EDGES]
-                ctx.obj[LEVELS] = db[LEVELS]
-                ctx.obj[PRED] = db[PRED]
-                ctx.obj[BACKBONE] = db[BACKBONE]
-        except KeyError:
-            pass
+        for db_key in DB_KEYS:
+            try:
+                with shelve.open(storage) as db:
+                    ctx.obj[db_key] = db[db_key]
+            except KeyError:
+                # print(f"Info: could not load {db_key}")
+                pass
 
     return ctx
 
@@ -478,11 +480,6 @@ def jenkins_topology(
         key += 1
 
     backbone_edges = compatible_backbone_edges(G, master)
-    ctx.obj[LEVELS] = levels_dict
-    ctx.obj[PRED] = predecessors
-    ctx.obj[BACKBONE] = backbone_edges
-    ctx.obj[EDGES] = set(G.edges)
-
     levels = levels_dict
 
     print(f"Create temporary {out_dir} folder")
@@ -686,7 +683,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
     components = list(nx.biconnected_components(G))
 
-    print("================================================")
+    print("========================================")
 
     # trying to remove articulation points
     added_edges = []
@@ -798,14 +795,14 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
         neighbors = sorted(
             [n for n in G.neighbors(max_degree_node)]
         )
-        print("neighbors:", neighbors)
+        # print("neighbors:", neighbors)
 
         sort_neig_dict = sort_by_degree(G, nodes=neighbors)
 
-        print("s neig dict:", sort_neig_dict)
+        # print("s neig dict:", sort_neig_dict)
 
         sort_neig = sorted(sort_neig_dict, reverse=True)
-        print("sorted neig:", sort_neig)
+        # print("sorted neig:", sort_neig)
 
         remove = removed[-1] if removed else remove
 
@@ -826,7 +823,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
             print("Error: Already removed -", remove)
             sys.exit(4)
 
-        print("to_remove:", remove)
+        # print("to_remove:", remove)
 
         # FIXME
         nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
@@ -840,8 +837,8 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
         removed.append(remove)
 
-        print("list of removed:", removed)
-        print("---")
+        # print("list of removed:", removed)
+        # print("---")
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we continue removing
@@ -855,38 +852,62 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
             can_not_remove.append(removed[-1])
             print("list to can not remove:", can_not_remove)
 
-    print("Added edges", set(added_edges))
-    print("Removed edges", set(removed))
-    # Difference should be empty
-    print("Difference:", set(added_edges).intersection(set(removed)))
-
-    print("Done")
-    nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
-    plt.show()
-    # save new graph
-    ctx.obj[GRAPH_NX] = G
-    with shelve.open(storage) as db:
-        for key in ctx.obj:
-            db[key] = ctx.obj[key]
-
     missing_segments = get_segments(added_edges)
     redundant_segments = get_segments(removed)
 
-    print(missing_segments)
-    print(redundant_segments)
+    print("----------------------------------------")
+    print("Remvoed edges:")
+    for edge in removed:
+        print(edge)
 
-    fixup_playbook = load_jinja_template(os.path.join(
-        "../src/graph_tool/data/fixup_topology_segments.j2"
-    ))
+    print(f"Removed edge(s) count: {len(removed)}")
+    print("----------------------------------------")
 
-    # Generate fixup playbook
-    fixup = "fixup"
-    fixup_data = fixup_playbook.render(
-        missing=missing_segments,
-        redundant=redundant_segments,
-    )
+    print("Summary:")
 
-    save_data(fixup, fixup_data)
+    if missing_segments or redundant_segments:
+        print("Added edges", set(added_edges))
+        print("Removed edges", set(removed))
+        # Difference should be empty
+        print("Difference:", set(added_edges).intersection(set(removed)))
+
+        print("----------------------------------------")
+
+        print("Saving result graph image")
+
+        nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
+        plt.show()
+
+        print("----------------------------------------")
+
+        print("Saving result graph data")
+
+        # save new graph
+        ctx.obj[GRAPH_NX] = G
+        with shelve.open(storage) as db:
+            for key in ctx.obj:
+                db[key] = ctx.obj[key]
+
+        print("----------------------------------------")
+        print("Generating fixup playbook")
+
+        fixup_playbook = load_jinja_template(os.path.join(
+            SCALING_DEFAULTS,
+            "fixup_topology_segments.j2"
+        ))
+
+        # Generate fixup playbook
+        fixup = "fixup.yml"
+        fixup_data = fixup_playbook.render(
+            missing=missing_segments,
+            redundant=redundant_segments,
+        )
+
+        save_data(fixup, fixup_data)
+    else:
+        print("Nothing to do...")
+
+    print("========================================")
 
 
 if __name__ == "__main__":

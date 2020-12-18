@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from graph_tool import tool
+from topotool import tool
 
 if __name__ == "__main__":
     tool.graphcli()

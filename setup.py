@@ -9,18 +9,18 @@ with open("requirements.txt") as req:
     reqs = req.readlines()
 
 setup(
-    name="graph_tool",
+    name="topotool",
     version="0.0.1",
-    description="Graph Tool",
+    description="Topology tool for FreeIPA deployments using ansible-freeipa with power of graph theory",
     long_description=readme,
     long_description_content_type="text/markdown",
     author="Tibor Dudlák",
     author_email="tibor.dudlak@gmail.com",
-    url="https://github.com/Tiboris/graph_tool",
+    url="https://github.com/Tiboris/topotool",
     license="Apache License 2.0",
     packages=find_packages("src"),
     package_dir={"": "src"},
     setup_requires=['wheel'],
     install_requires=reqs,
-    scripts=["scripts/graphtool"],
+    scripts=["scripts/topotool"],
 )
