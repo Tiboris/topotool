@@ -15,29 +15,11 @@ env.ANSIBLE_FREEIPA_CUSTOM_REPO = '{{ ansible_freeipa_custom_repo }}'
 
 node {
     sh script: "printenv"
-    {% for level in levels %}
-    stage("y{{ level }}") {
-        parallel(
-        {% for node in levels[level] %}
-            "{{ node }}": {
-                new TeRun([
-                    metadata: 'http://{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/{{ node }}.yaml',
-                    test: '{{ node }}'
-                ]).exec('idm-ci-slave')
-            },
-        {% endfor %}
-        )
-    }
-    {% endfor %}
-    stage("controller") {
-        parallel(
-            "controller-deployment": {
-                new TeRun([
-                    metadata: 'http://{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/controller.yaml',
-                    test: 'controller'
-                ]).exec('idm-ci-slave')
-            },
-        )
+    stage("deploy_topology") {
+        new TeRun([
+            metadata: 'http://{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/scaling_metadata.yaml',
+            test: 'scaling_{{ run }}'
+        ]).exec('idm-ci-slave')
     }
 }
 

@@ -62,11 +62,11 @@ def load_jinja_template(path):
     return template
 
 
-def gen_metadata(name, node_os, destination,
+def gen_metadata(topo_nodes, node_os, destination,
                  project, run, job, template,
                  tool_repo, tool_branch):
     metadata = template.render(
-        dnsname=name,
+        topo_nodes=topo_nodes,
         node_os=node_os,
         project=project,
         run=run,
@@ -74,7 +74,7 @@ def gen_metadata(name, node_os, destination,
         tool_repo=tool_repo,
         tool_branch=tool_branch
     )
-    output_file = os.path.join(destination, f"{name}.yaml")
+    output_file = os.path.join(destination, "scaling_metadata.yaml")
     save_data(output_file, metadata)
 
 
@@ -341,14 +341,6 @@ def print_topology(topology):
     help="Ansible-freeipa install jinja2 template", show_default=True
 )
 @click.option(
-    "--controller", type=click.Path(exists=True),
-    default=os.path.join(
-        SCALING_DEFAULTS,
-        "controller.j2"
-    ),
-    help="Controller metadata file jinja2 template", show_default=True
-)
-@click.option(
     "--out-dir", "-o",
     type=str, default="FILES",
     help="Output directory to store generated data"
@@ -437,13 +429,13 @@ def print_topology(topology):
 def jenkins_topology(
     ctx, jenkins_template, out_dir, storage, node_os,
     idm_ci, repo_branch, tool_repo, tool_branch, project, run, job,
-    metadata_storage, base_metadata, inventory, ansible_install, controller,
+    metadata_storage, base_metadata, inventory, ansible_install,
     freeipa_upstream_copr, freeipa_downstream_copr, freeipa_custom_repo,
     ansible_freeipa_upstream_copr, ansible_freeipa_downstream_copr,
     ansible_freeipa_custom_repo,
 ):
     ctx = load_context(ctx, storage)
-    print()
+
     try:
         G = ctx.obj[GRAPH_NX]
         master = ctx.obj[MASTER]
@@ -523,17 +515,15 @@ def jenkins_topology(
     # merge dictionary items to one list containing all nodes
     topo_nodes = list(chain(*[levels[level] for level in levels]))
 
-    print("Generate metadata for each topology node")
+    print("Generate metadata for topology nodes")
     # Load jinja teplate
     metadata_template = load_jinja_template(base_metadata)
 
-    # Generate the metadata files for each node inside of FILES directory
-    # gen_metadata(template, "y0") etc.
-    for node in topo_nodes:
-        gen_metadata(node, node_os, out_dir,
-                     project, run, job,
-                     metadata_template,
-                     tool_repo, tool_branch)
+    # Generate the metadata file for all nodes inside of FILES directory
+    gen_metadata(topo_nodes, node_os, out_dir,
+                 project, run, job,
+                 metadata_template,
+                 tool_repo, tool_branch)
 
     print("Generate ansible-freeipa inventory file")
     # Load jinja teplate
@@ -557,21 +547,6 @@ def jenkins_topology(
     installfile = ansible_install.render(levels=levels,
                                          missing=segments)
     save_data(output_install, installfile)
-
-    print("Generate controler metadata")
-    controller_templ = load_jinja_template(controller)
-    # Generate controler metadata
-    controler_file = controller_templ.render(
-        metadata_storage=metadata_storage,
-        node_os=node_os,
-        project=project,
-        run=run,
-        job=job,
-        tool_repo=tool_repo,
-        tool_branch=tool_branch,
-    )
-    output_controller = os.path.join(out_dir, "controller.yaml")
-    save_data(output_controller, controler_file)
 
 
 def compatible_backbone_edges(G, master):
