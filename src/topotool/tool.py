@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from collections import Counter, OrderedDict
 from topotool.graphs import Graph
-from copy import deepcopy
+from copy import Error, deepcopy
 from jinja2 import Template
 from itertools import chain
 
@@ -262,7 +262,8 @@ def draw(ctx, storage):
         print("Please load or generate the topology first.")
         exit(1)
 
-    nx.draw(G, with_labels=True, font_weight='bold')
+    pos = nx.spring_layout(G, seed=200)
+    nx.draw(G, pos, with_labels=True, node_color="#4e9a06")
     plt.show()
 
 
@@ -584,13 +585,22 @@ def sort_by_degree(G, nodes=None, reverse=False):
             record = []
         nodes_by_degree[cnt] = add_list_item(record, node)
 
-    for degree in range(max(nodes_by_degree, key=int), 0, -1):
-        try:
-            sorted_nodes[degree] = sorted(
-                nodes_by_degree[degree], reverse=reverse
-            )
-        except KeyError:
-            pass
+    if reverse:
+        for degree in range(max(nodes_by_degree, key=int), 0, -1):
+            try:
+                sorted_nodes[degree] = sorted(
+                    nodes_by_degree[degree], reverse=reverse
+                )
+            except KeyError:
+                pass
+    else:
+        for degree in range(max(nodes_by_degree, key=int) + 1):
+            try:
+                sorted_nodes[degree] = sorted(
+                    nodes_by_degree[degree], reverse=reverse
+                )
+            except KeyError:
+                pass
 
     return sorted_nodes
 
@@ -642,7 +652,6 @@ def analyze(ctx, storage, output):
     print("Looking for articulation points...")
 
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
-
     components = list(nx.biconnected_components(G))
 
     if art_points or components:
@@ -678,48 +687,85 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
         print("Please load or generate the topology first.")
         exit(1)
 
-    candidates = []
-
-    art_points = sorted(list(nx.articulation_points(G)), reverse=True)
-    components = list(nx.biconnected_components(G))
-
     print("========================================")
-
+    step = 0
     # trying to remove articulation points
     added_edges = []
     can_not_add = []
     to_add = ""
 
-    while True:
+    all_components = list(nx.biconnected_components(G))
+
+    while len(all_components) > 1:
+        art_points = sorted(list(nx.articulation_points(G)), reverse=True)
+
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we stop
             break
 
-        if not art_points:
-            # no points left to take care of from previous cycle
-            art_points = list(nx.articulation_points(G))
+        # set colors for the edges to draw
+        colors = []
+        for u, v in G.edges():
+            try:
+                colors.append(G[u][v]["color"])
+            except KeyError:
+                colors.append("black")
 
+        # pick articulation point to solve issue for
         art_point = art_points.pop()
 
         color = "green"  # default added edge color
 
-        for comp in components:
-            # print("art points:", art_points)
-            # print("processing:", art_point)
-            if art_point not in comp:
-                # skip if articulation point is not in component
-                continue
+        components = []
+        # pick all biconected components containing articulation point
 
-            # we would pick node with the lowest degree to add edge to
+        for comp in all_components:
+            if art_point in comp:
+                components.append(comp)
 
-            sorted_nodes = sort_by_degree(G, nodes=comp, reverse=True)
+        print(
+            f"Info: {art_point} directly connects "
+            f"{len(components)} components: {components}"
+        )
+        # we would pick node with the lowest degree to add edge to
 
-            min_degree = min(sorted_nodes, key=int)
+        # we build list of candidates
+        candidates = []
 
-            to_add = sorted(sorted_nodes[min_degree])[0]
+        while len(candidates) != 2:
+            if not components:
+                break
+
+            comp = all_components.pop()
+            #  get dictionary with keys corresponding to degrees and each key
+            # will have a list of node with following degree as value
+            sorted_nodes = sort_by_degree(G, nodes=comp, reverse=False)
+
+            # we would choose a node with the fewest connection count
+            # therefore the lowerest degree of the node
+
+            to_pick_from = []
+            # list with nodes, first in the list are with the lower degree
+            for _degree, nodes in sorted_nodes.items():
+                to_pick_from += nodes
+
+            start = 0
+            to_add = None
+            while (
+                (not to_add or to_add == art_point)
+                and (start < len(to_pick_from))
+            ):
+                to_add = to_pick_from[start]
+                start += 1
+
+            if to_add == art_point:
+                raise Error(
+                    "Can not pick other node than the articulation point"
+                )
+
+            min_degree = nx.degree(G, to_add)
 
             if min_degree < max_repl_agreements:
-                # print(sorted(sorted_nodes[min_degree]))
                 candidates.append(to_add)
                 color = "green" if len(candidates) > 2 else color
             else:
@@ -742,22 +788,34 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
                         "Try adding --omit-max-degree option to add edges "
                         "even when maximum degree of node is reached"
                     )
+                continue
 
-            edges_to_add = []
+            if to_add in can_not_add:
+                neighs = G.neighbors(to_add)
+                print(f"Unable to add more replication agreements to: {to_add}")
+                for nei in neighs:
+                    print(f"{to_add} has neihgbor: {nei}")
+                sys.exit(2)
 
-            if len(candidates) >= 2:
-                left = candidates[-2]
-                right = candidates[-1]
-                edges_to_add.append((left, right))
-                G.add_edges_from(edges_to_add, color=color)
-                added_edges += edges_to_add
+        edges_to_add = []
 
-        if to_add in can_not_add:
-            neighs = G.neighbors(to_add)
-            print(f"Unable to add more replication agreements to: {to_add}")
-            for nei in neighs:
-                print(f"{to_add} has neihgbor: {nei}")
-            sys.exit(2)
+        if len(candidates) == 2:
+            left = candidates[-2]
+            right = candidates[-1]
+            edges_to_add.append((left, right))
+            plt.close()
+            G.add_edges_from(edges_to_add, color=color)
+            pos = nx.spring_layout(G, seed=200)
+            nx.draw(
+                G, pos, with_labels=True,
+                edge_color=colors, node_color="#4e9a06"
+            )
+            step += 1
+            print("STEP", step)
+            plt.savefig(f"fixup_step_{step}_add_{left}_{right}.png")
+            added_edges += edges_to_add
+
+        all_components = list(nx.biconnected_components(G))
 
     print("----------------------------------------")
     print("Added edges:")
@@ -825,20 +883,19 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
         # print("to_remove:", remove)
 
-        # FIXME
-        nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
-        plt.show()
-
+        plt.close()
+        pos = nx.spring_layout(G, seed=200)
+        step += 1
         G.remove_edge(*remove)
-
+        nx.draw(
+            G, pos, with_labels=True, edge_color=colors, node_color="#4e9a06"
+        )
+        plt.savefig(f"fixup_step_{step}_rm_{remove[0]}_{remove[1]}.png")
         # immidiately after removal recalculate
         sorted_nodes = sort_by_degree(G)
         max_degree = max(sorted_nodes, key=int)
 
         removed.append(remove)
-
-        # print("list of removed:", removed)
-        # print("---")
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we continue removing
@@ -874,8 +931,11 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
         print("----------------------------------------")
 
         print("Saving result graph image")
-
-        nx.draw(G, with_labels=True, font_weight='bold', edge_color=colors)
+        plt.close()
+        pos = nx.spring_layout(G, seed=200)
+        nx.draw(
+            G, pos, with_labels=True, edge_color=colors, node_color="#4e9a06",
+        )
         plt.show()
 
         print("----------------------------------------")
