@@ -250,6 +250,81 @@ def generate(ctx, storage, branches, length, nodes, master):
             db[key] = ctx.obj[key]
 
 
+def produce_output_image(G, filename):
+    plt.close()
+
+    art_points = list(nx.articulation_points(G))
+    # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
+    pos = nx.spring_layout(
+        G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+    )
+
+    x_values, y_values = zip(*pos.values())
+    x_max = max(x_values)
+    x_min = min(x_values)
+    x_margin = (x_max - x_min) * 0.3
+    plt.xlim(x_min - x_margin, x_max + x_margin)
+
+    plot_nodes = {
+        "green": [],
+        "orange": [],
+        "red": [],
+        "yellow": [],
+        "pink": [],
+    }
+
+    for node in G:
+        node_degree = nx.degree(G, node)
+        if node in art_points and node_degree > 4:
+            plot_nodes["orange"].append(node)
+        elif node in art_points:
+            plot_nodes["yellow"].append(node)
+        elif node_degree > 4:
+            plot_nodes["red"].append(node)
+        elif node_degree == 1:
+            plot_nodes["pink"].append(node)
+        else:
+            plot_nodes["green"].append(node)
+
+    for color, color_nodes in plot_nodes.items():
+        nx.draw_networkx_nodes(
+            G, pos,
+            nodelist=color_nodes,
+            node_color=color,
+            node_size=500,
+            alpha=0.8
+        )
+
+    # set colors for the edges to draw
+    colors = []
+    for u, v in G.edges():
+        try:
+            colors.append(G[u][v]["color"])
+        except KeyError:
+            colors.append("black")
+
+    nx.draw_networkx_edges(
+        G, pos,
+        edge_color=colors,
+        edgelist=G.edges
+    )
+
+    labels = {}
+
+    for node in G:
+        labels[node] = node
+
+    nx.draw_networkx_labels(G, pos, labels)
+    plt.axis('off')
+    if filename:
+        plt.savefig(
+            os.path.abspath(filename),
+            dpi=400
+        )
+    else:
+        plt.show()
+
+
 @graphcli.command()
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
@@ -263,18 +338,7 @@ def draw(ctx, storage):
         print("Please load or generate the topology first.")
         exit(1)
 
-    pos = nx.spring_layout(
-        G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
-    )
-
-    x_values, y_values = zip(*pos.values())
-    x_max = max(x_values)
-    x_min = min(x_values)
-    x_margin = (x_max - x_min) * 0.3
-    plt.xlim(x_min - x_margin, x_max + x_margin)
-
-    nx.draw(G, pos, with_labels=True, node_color="#4e9a06")
-    plt.show()
+    produce_output_image(G, filename="topology_drawing.png")
 
 
 def get_segments(edges):
@@ -556,22 +620,9 @@ def jenkins_topology(
                                          missing=segments)
     save_data(output_install, installfile)
 
-    plt.close()
-
-    pos = nx.spring_layout(
-        G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+    produce_output_image(
+        G, os.path.join(out_dir, "topology.png")
     )
-
-    x_values, y_values = zip(*pos.values())
-    x_max = max(x_values)
-    x_min = min(x_values)
-    x_margin = (x_max - x_min) * 0.3
-    plt.xlim(x_min - x_margin, x_max + x_margin)
-    nx.draw(
-        G, pos, with_labels=True, node_color="#4e9a06",
-    )
-
-    plt.savefig(os.path.join(out_dir, "topology.png"), dpi=400)
 
 
 def compatible_backbone_edges(G, master):
@@ -733,14 +784,6 @@ def fixup(ctx, storage, max_repl_agreements,
             print("Info: Will not add more edges")
             break
 
-        # set colors for the edges to draw
-        colors = []
-        for u, v in G.edges():
-            try:
-                colors.append(G[u][v]["color"])
-            except KeyError:
-                colors.append("black")
-
         # pick articulation point to solve issue for
         art_point = art_points.pop()
 
@@ -832,31 +875,17 @@ def fixup(ctx, storage, max_repl_agreements,
                     print(f"{to_add} has neihgbor: {nei}")
                 sys.exit(2)
 
-        edges_to_add = []
-
         if len(candidates) == 2:
             left = candidates[-2]
             right = candidates[-1]
-            edges_to_add.append((left, right))
-            plt.close()
-            G.add_edges_from(edges_to_add, color=color)
-            pos = nx.spring_layout(
-                G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
-            )
-
-            x_values, y_values = zip(*pos.values())
-            x_max = max(x_values)
-            x_min = min(x_values)
-            x_margin = (x_max - x_min) * 0.3
-            plt.xlim(x_min - x_margin, x_max + x_margin)
-            nx.draw(
-                G, pos, with_labels=True,
-                edge_color=colors, node_color="#4e9a06"
-            )
+            edge_to_add = (left, right)
             step += 1
+            G.add_edges_from([edge_to_add], color=color)
             print("STEP", step)
-            plt.savefig(f"fixup_step_{step}_add_{left}_{right}.png", dpi=400)
-            added_edges += edges_to_add
+            produce_output_image(
+                G, f"fixup_step_{step}_add_{left}_{right}.png"
+            )
+            added_edges.append(edge_to_add)
 
         all_components = list(nx.biconnected_components(G))
 
@@ -924,25 +953,14 @@ def fixup(ctx, storage, max_repl_agreements,
             print("Error: Already removed -", remove)
             sys.exit(4)
 
-        # print("to_remove:", remove)
+        if remove:
+            step += 1
+            G.remove_edge(*remove)
 
-        plt.close()
-        pos = nx.spring_layout(
-            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+        produce_output_image(
+            G, filename=f"fixup_step_{step}_rm_{remove[0]}_{remove[1]}.png"
         )
 
-        x_values, y_values = zip(*pos.values())
-        x_max = max(x_values)
-        x_min = min(x_values)
-        x_margin = (x_max - x_min) * 0.3
-        plt.xlim(x_min - x_margin, x_max + x_margin)
-        step += 1
-        G.remove_edge(*remove)
-        nx.draw(
-            G, pos, with_labels=True, edge_color=colors, node_color="#4e9a06"
-        )
-        plt.savefig(f"fixup_step_{step}_rm_{remove[0]}_{remove[1]}.png", dpi=400)
-        # immidiately after removal recalculate
         sorted_nodes = sort_by_degree(G)
         max_degree = max(sorted_nodes, key=int)
 
@@ -987,22 +1005,9 @@ def fixup(ctx, storage, max_repl_agreements,
 
         print("Saving result graph image")
 
-        plt.close()
-        # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
-        pos = nx.spring_layout(
-            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+        produce_output_image(
+            G, "fixup.png"
         )
-
-        x_values, y_values = zip(*pos.values())
-        x_max = max(x_values)
-        x_min = min(x_values)
-        x_margin = (x_max - x_min) * 0.3
-        plt.xlim(x_min - x_margin, x_max + x_margin)
-        nx.draw(
-            G, pos, with_labels=True, edge_color=colors, node_color="#4e9a06",
-        )
-
-        plt.savefig("fixup.png", dpi=400)
 
         print("----------------------------------------")
 
