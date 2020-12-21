@@ -153,7 +153,6 @@ def predecessors_from_first_levels(levels):
     res = {}
     for node in levels[-1]:
         res[node] = levels[0][0]
-    # print(res)
     return res
 
 
@@ -175,8 +174,6 @@ def load(ctx, input_file, data_format, master, storage):
 
     data = deepcopy(ctx.obj[GRAPH_DATA])
     graph_data = Graph(data, data_format=data_format)
-
-    # print(graph_data.edge_list)
 
     ctx.obj[GRAPH_OBJECT] = graph_data
 
@@ -236,18 +233,10 @@ def generate(ctx, storage, branches, length, nodes, master):
 
     ctx.obj[GRAPH_NX] = G
     ctx.obj[GRAPH_DATA] = None
-
-    # ctx.obj[LEVELS] = topo["levels"]
-
-    # ctx.obj[PRED] = topo["predecessors"]
     ctx.obj[MASTER] = master
-    # ctx.obj[BACKBONE] = compatible_backbone_edges(G, master)
-
-    # ctx.obj[EDGES] = topo["edges"]
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
-            # print(key)
             db[key] = ctx.obj[key]
 
 
@@ -376,9 +365,6 @@ def get_segments(edges):
     processed = set()
     not_processed = set(edges)
     while not_processed:
-        # from time import sleep
-        # sleep(3)
-        # print("N", not_p,"P", proc, "A", node, "M", most_common_nodes)
         left = set()
         right = set()
         node, _ = next(node_iter)
@@ -419,7 +405,7 @@ def print_topology(topology):
         "jenkinsjob.j2"
     ),
     help="Jenkinsfile jinja2 template", show_default=True
-)  # FIXME paths ^^^
+)
 @click.option(
     "--base-metadata", type=click.Path(exists=True),
     default=os.path.join(
@@ -578,7 +564,6 @@ def jenkins_topology(
     levels_dict = {}
     for level in levels:
         levels_dict[key] = level
-        # print(level)
         key += 1
 
     backbone_edges = compatible_backbone_edges(G, master)
@@ -789,7 +774,6 @@ def fixup(ctx, storage, max_repl_agreements,
 
     try:
         G = ctx.obj[GRAPH_NX]
-        # master = ctx.obj[MASTER]
     except KeyError:
         print("Please load or generate the topology first.")
         exit(1)
@@ -812,7 +796,7 @@ def fixup(ctx, storage, max_repl_agreements,
             print("Info: Will not add more edges")
             break
 
-        # pick articulation point to solve issue for
+        # pick articulation point to solve issue for FIXME
         art_point = art_points.pop()
 
         color = "green"  # default added edge color
@@ -843,7 +827,7 @@ def fixup(ctx, storage, max_repl_agreements,
                 sys.stderr.write("No more components to try connecting\n")
                 sys.exit(2)
 
-            #  get dictionary with keys corresponding to degrees and each key
+            # get dictionary with keys corresponding to degrees and each key
             # will have a list of node with following degree as value
             sorted_nodes = sort_by_degree(G, nodes=comp, reverse=False)
 
@@ -952,14 +936,9 @@ def fixup(ctx, storage, max_repl_agreements,
         neighbors = sorted(
             [n for n in G.neighbors(max_degree_node)]
         )
-        # print("neighbors:", neighbors)
 
         sort_neig_dict = sort_by_degree(G, nodes=neighbors)
-
-        # print("s neig dict:", sort_neig_dict)
-
         sort_neig = sorted(sort_neig_dict, reverse=True)
-        # print("sorted neig:", sort_neig)
 
         remove = removed[-1] if removed else remove
 
@@ -969,8 +948,6 @@ def fixup(ctx, storage, max_repl_agreements,
             if to_remove not in can_not_remove:
                 remove = to_remove
                 break
-                # commenting this break will help to create
-                # art point in the loop file while running
 
         if remove in can_not_remove:
             print("Error: Tried to repetatively remove:", remove)
@@ -1002,7 +979,7 @@ def fixup(ctx, storage, max_repl_agreements,
                 "articulation point"
             )
             if add_while_removing:
-                pass  # TODO add function remove art point
+                pass  # TODO add call remove_art_points FIXME
             else:
                 print(f"Info: Adding edge {removed[-1]} back")
                 G.add_edge(removed[-1][0], removed[-1][1])
@@ -1040,7 +1017,7 @@ def fixup(ctx, storage, max_repl_agreements,
 
         print("Saving result graph data")
 
-        # save new graph
+        # save new graph to context db
         ctx.obj[GRAPH_NX] = G
         with shelve.open(storage) as db:
             for key in ctx.obj:
