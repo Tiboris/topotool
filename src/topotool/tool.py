@@ -45,7 +45,6 @@ def load_context(ctx, storage):
                 with shelve.open(storage) as db:
                     ctx.obj[db_key] = db[db_key]
             except KeyError:
-                # print(f"Info: could not load {db_key}")
                 pass
 
     return ctx
@@ -760,27 +759,8 @@ def analyze(ctx, storage, output):
     print("----------------------------------------")
 
 
-@graphcli.command()
-@click.option(
-    "-h", "--max", "max_repl_agreements", default=MAX_REPL_AGREEMENTS
-)
-@click.option("--omit-max-degree", is_flag=True, default=False)
-@click.option("--add-while-removing", is_flag=True, default=False)
-@click.option("-s", "--storage", default="./.graph_storage.json")
-@click.pass_context
-def fixup(ctx, storage, max_repl_agreements,
-          omit_max_degree, add_while_removing):
-    ctx = load_context(ctx, storage)
+def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
-    try:
-        G = ctx.obj[GRAPH_NX]
-    except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
-
-    print("========================================")
-    step = 0
-    produce_output_image(G, f"fixup_step_{step}_starting_with.png")
     # trying to remove articulation points
     added_edges = []
     can_not_add = []
@@ -908,13 +888,12 @@ def fixup(ctx, storage, max_repl_agreements,
     print(f"Added edge(s) count: {len(added_edges)}")
     print("----------------------------------------")
 
-    colors = []
-    for u, v in G.edges():
-        try:
-            colors.append(G[u][v]["color"])
-        except KeyError:
-            colors.append("black")
+    return G, added_edges, step
 
+
+def remove_overloaded_nodes_edges(
+    G, step, add_while_removing, omit_max_degree, max_repl_agreements
+):
     removed = []
     can_not_remove = []
     remove = set()
@@ -985,6 +964,45 @@ def fixup(ctx, storage, max_repl_agreements,
                 G.add_edge(removed[-1][0], removed[-1][1])
                 can_not_remove.append(removed[-1])
                 print("list to can not remove:", can_not_remove)
+
+    return G, removed, step
+
+@graphcli.command()
+@click.option(
+    "-h", "--max", "max_repl_agreements", default=MAX_REPL_AGREEMENTS
+)
+@click.option("--omit-max-degree", is_flag=True, default=False)
+@click.option("--add-while-removing", is_flag=True, default=False)
+@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.pass_context
+def fixup(ctx, storage, max_repl_agreements,
+          omit_max_degree, add_while_removing):
+    ctx = load_context(ctx, storage)
+
+    try:
+        G = ctx.obj[GRAPH_NX]
+    except KeyError:
+        print("Please load or generate the topology first.")
+        exit(1)
+
+    print("========================================")
+    step = 0
+    produce_output_image(G, f"fixup_step_{step}_starting_with.png")
+
+    G, added_edges, step = remove_articulation_points(
+        G, step=step,
+        omit_max_degree=omit_max_degree,
+        max_repl_agreements=max_repl_agreements,
+    )
+
+    G, removed, step = remove_overloaded_nodes_edges(
+        G, step=step,
+        add_while_removing=add_while_removing,
+        omit_max_degree=omit_max_degree,
+        max_repl_agreements=max_repl_agreements,
+    )
+
+
 
     missing_segments = get_segments(added_edges)
     redundant_segments = get_segments(removed)
