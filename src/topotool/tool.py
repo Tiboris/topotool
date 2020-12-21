@@ -12,7 +12,7 @@ import matplotlib.patches as mpatches
 from numpy import sqrt
 from collections import Counter, OrderedDict
 from topotool.graphs import Graph
-from copy import Error, deepcopy
+from copy import deepcopy
 from jinja2 import Template
 from itertools import chain
 
@@ -186,7 +186,7 @@ def load(ctx, input_file, data_format, master, storage):
     ctx.obj[GRAPH_NX] = G
     ctx.obj[MASTER] = master
 
-    print("Loading of topology done")
+    sys.stdout.write("Loading of topology done\n")
 
     with shelve.open(storage) as db:
         for key in ctx.obj:
@@ -350,8 +350,8 @@ def draw(ctx, storage):
     try:
         G = ctx.obj[GRAPH_NX]
     except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
+        sys.stderr.write("Please load or generate the topology first\n")
+        sys.exit(1)
 
     produce_output_image(G, filename="topology_drawing.png")
 
@@ -529,8 +529,8 @@ def jenkins_topology(
         G = ctx.obj[GRAPH_NX]
         master = ctx.obj[MASTER]
     except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
+        sys.stderr.write("Please load or generate the topology first\n")
+        sys.exit(1)
 
     all_successors = list(nx.bfs_successors(G, master))
     levels = levels_from_fist_successors(all_successors[:1])
@@ -705,8 +705,8 @@ def analyze(ctx, storage, output):
         G = ctx.obj[GRAPH_NX]
         # master = ctx.obj[MASTER]
     except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
+        sys.stderr.write("Please load or generate the topology first.")
+        sys.exit(1)
 
     print("----------------------------------------")
     print("General graph information:\n" + str(nx.info(G)))
@@ -773,7 +773,7 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we stop
-            print("Info: Will not add more edges")
+            sys.stdout.write("Info: Will not add more edges\n")
             break
 
         # pick articulation point to solve issue for FIXME
@@ -781,30 +781,17 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
         color = "green"  # default added edge color
 
-        components = []
-        # pick all biconected components containing articulation point
-
-        for comp in all_components:
-            if art_point in comp:
-                components.append(comp)
-
-        print(
-            f"Info: {art_point} directly connects "
-            f"{len(components)} components: {components}"
-        )
-        # we would pick node with the lowest degree to add edge to
-
         # we build list of candidates
         candidates = []
 
         while len(candidates) != 2:
-            if not components:
+            if not all_components:
                 break
 
             try:
                 comp = all_components.pop()
             except IndexError:
-                sys.stderr.write("No more components to try connecting\n")
+                sys.stderr.write("No more components left to try connecting\n")
                 sys.exit(2)
 
             # get dictionary with keys corresponding to degrees and each key
@@ -822,16 +809,19 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
             start = 0
             to_add = None
             while (
-                (not to_add or to_add == art_point)
+                (not to_add or to_add in art_points)
                 and (start < len(to_pick_from))
             ):
                 to_add = to_pick_from[start]
                 start += 1
 
-            if to_add == art_point:
-                raise Error(
-                    "Can not pick other node than the articulation point"
-                )
+            # todo research
+            if to_add in art_points:
+                print(to_add, candidates)
+            #     sys.stderr.write(
+            #         "Can not pick other node than the articulation point\n"
+            #     )
+            #     sys.exit(5)
 
             min_degree = nx.degree(G, to_add)
 
@@ -848,24 +838,28 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
                     can_not_add.append(to_add)
 
                 added_str = "Added" if added else "Did not add"
-                print(
+                sys.stdout.write(
                     f"Warning: {added_str} {color} edge to connect component "
-                    f"({comp}) with articulation point {art_point} - it "
-                    f"has {max_repl_agreements} or more replication agreements"
+                    f"({comp}) with articulation point {art_point} "
+                    f"{to_add} has {max_repl_agreements} "
+                    "or more replication agreements\n"
                 )
-                if not added and to_add not in can_not_add:
-                    print(
-                        "Try adding --omit-max-degree option to add edges "
-                        "even when maximum degree of node is reached"
+
+                if not added and to_add in can_not_add:
+                    sys.stdout.write(
+                        "Hint: Try adding --omit-max-degree option to add "
+                        "edges even when maximum degree of node is reached\n"
                     )
                 continue
 
             if to_add in can_not_add:
                 neighs = G.neighbors(to_add)
-                print(f"Unable to add more replication agreements to: {to_add}")
+                sys.stderr.write(
+                    f"Unable to add more replication agreements to: {to_add}\n"
+                )
                 for nei in neighs:
-                    print(f"{to_add} has neihgbor: {nei}")
-                sys.exit(2)
+                    sys.stderr.write(f"{to_add} has neihgbor: {nei}\n")
+                sys.exit(3)
 
         if len(candidates) == 2:
             left = candidates[-2]
@@ -897,6 +891,7 @@ def remove_overloaded_nodes_edges(
     removed = []
     can_not_remove = []
     remove = set()
+    added_edges = []  # used when add_while_removing is set to true
 
     sorted_nodes = sort_by_degree(G)
     max_degree = max(sorted_nodes, key=int)
@@ -909,7 +904,7 @@ def remove_overloaded_nodes_edges(
         max_degree_node = next(sorted_max_degree_nodes)
 
         if max_degree <= max_repl_agreements:
-            print("Info: Will not remove more edges")
+            sys.stdout.write("Info: Will not remove more edges\n")
             break
 
         neighbors = sorted(
@@ -929,11 +924,18 @@ def remove_overloaded_nodes_edges(
                 break
 
         if remove in can_not_remove:
-            print("Error: Tried to repetatively remove:", remove)
-            sys.exit(3)
+            sys.stderr.write(
+                "Error: Can not remove any edge without "
+                "creating articulation points\n"
+            )
+            sys.stderr.write(
+                "Try to use option '--add-while-removing' to remove "
+                "articulation poins created by this removal\n"
+            )
+            sys.exit(4)
 
         if remove in removed:
-            print("Error: Already removed -", remove)
+            sys.stderr.write(f"Error: Edge already removed - {remove}\n")
             sys.exit(4)
 
         if remove:
@@ -953,23 +955,45 @@ def remove_overloaded_nodes_edges(
             # if there are no articulation points we continue removing
             continue
         else:
-            print(
-                "Warning: Removal of the", removed[-1], "edge created "
-                "articulation point"
+            sys.stdout.write(
+                f"Warning: Removal of the {removed[-1]} edge created "
+                "articulation point\n"
             )
             if add_while_removing:
-                pass  # TODO add call remove_art_points FIXME
+                sys.stdout.write(
+                    "Info: Trying to fix new articulation points\n"
+                )
+                G, added, step = remove_articulation_points(
+                    G, step=step,
+                    omit_max_degree=omit_max_degree,
+                    max_repl_agreements=max_repl_agreements,
+                )
+                added_edges += added
+
+                for new in added:
+                    if (
+                        (new[0], new[1]) in removed
+                        or (new[1], new[0]) in removed
+                    ):
+                        sys.stderr.write(
+                            f"Error Added edge {new} has been found in"
+                            f"already removed list: {removed}\n"
+                        )
+                        sys.exit(4)
+
             else:
-                print(f"Info: Adding edge {removed[-1]} back")
+                sys.stdout.write(f"Info: Adding edge {removed[-1]} back\n")
                 G.add_edge(removed[-1][0], removed[-1][1])
                 can_not_remove.append(removed[-1])
-                print("list to can not remove:", can_not_remove)
+                sys.stdout.write(f"list to can not remove: {can_not_remove}")
 
-    return G, removed, step
+    return G, removed, added_edges, step
+
 
 @graphcli.command()
 @click.option(
-    "-h", "--max", "max_repl_agreements", default=MAX_REPL_AGREEMENTS
+    "-h", "--max", "max_repl_agreements",
+    default=MAX_REPL_AGREEMENTS, type=click.IntRange(2, 10),
 )
 @click.option("--omit-max-degree", is_flag=True, default=False)
 @click.option("--add-while-removing", is_flag=True, default=False)
@@ -982,8 +1006,8 @@ def fixup(ctx, storage, max_repl_agreements,
     try:
         G = ctx.obj[GRAPH_NX]
     except KeyError:
-        print("Please load or generate the topology first.")
-        exit(1)
+        sys.stderr.write("Please load or generate the topology first\n")
+        sys.exit(1)
 
     print("========================================")
     step = 0
@@ -995,20 +1019,20 @@ def fixup(ctx, storage, max_repl_agreements,
         max_repl_agreements=max_repl_agreements,
     )
 
-    G, removed, step = remove_overloaded_nodes_edges(
+    G, removed, added_with_removal, step = remove_overloaded_nodes_edges(
         G, step=step,
         add_while_removing=add_while_removing,
         omit_max_degree=omit_max_degree,
         max_repl_agreements=max_repl_agreements,
     )
 
-
+    added_edges += added_with_removal
 
     missing_segments = get_segments(added_edges)
     redundant_segments = get_segments(removed)
 
     print("----------------------------------------")
-    print("Remvoed edges:")
+    print("Removed edges:")
     for edge in removed:
         print(edge)
 
@@ -1018,8 +1042,12 @@ def fixup(ctx, storage, max_repl_agreements,
     print("Summary:")
 
     if missing_segments or redundant_segments:
-        print("Added edges", set(added_edges))
-        print("Removed edges", set(removed))
+        print(f"Added edge(s) [{len(added_edges)}]:")
+        for edge in added_edges:
+            print(edge)
+        print(f"Removed edge(s) [{len(removed)}] :")
+        for edge in removed:
+            print(edge)
         # Difference should be empty
         print("Difference:", set(added_edges).intersection(set(removed)))
 
