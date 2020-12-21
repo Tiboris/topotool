@@ -8,6 +8,7 @@ import shelve
 import networkx as nx
 import matplotlib.pyplot as plt
 
+from numpy import sqrt
 from collections import Counter, OrderedDict
 from topotool.graphs import Graph
 from copy import Error, deepcopy
@@ -262,7 +263,16 @@ def draw(ctx, storage):
         print("Please load or generate the topology first.")
         exit(1)
 
-    pos = nx.spring_layout(G, seed=200)
+    pos = nx.spring_layout(
+        G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+    )
+
+    x_values, y_values = zip(*pos.values())
+    x_max = max(x_values)
+    x_min = min(x_values)
+    x_margin = (x_max - x_min) * 0.3
+    plt.xlim(x_min - x_margin, x_max + x_margin)
+
     nx.draw(G, pos, with_labels=True, node_color="#4e9a06")
     plt.show()
 
@@ -546,6 +556,23 @@ def jenkins_topology(
                                          missing=segments)
     save_data(output_install, installfile)
 
+    plt.close()
+
+    pos = nx.spring_layout(
+        G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+    )
+
+    x_values, y_values = zip(*pos.values())
+    x_max = max(x_values)
+    x_min = min(x_values)
+    x_margin = (x_max - x_min) * 0.3
+    plt.xlim(x_min - x_margin, x_max + x_margin)
+    nx.draw(
+        G, pos, with_labels=True, node_color="#4e9a06",
+    )
+
+    plt.savefig(os.path.join(out_dir, "topology.png"), dpi=400)
+
 
 def compatible_backbone_edges(G, master):
     """Rerurn edges not based on direction of bfs walk"""
@@ -675,9 +702,11 @@ def analyze(ctx, storage, output):
     "-h", "--max", "max_repl_agreements", default=MAX_REPL_AGREEMENTS
 )
 @click.option("--omit-max-degree", is_flag=True, default=False)
+@click.option("--add-while-removing", is_flag=True, default=False)
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
-def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
+def fixup(ctx, storage, max_repl_agreements,
+          omit_max_degree, add_while_removing):
     ctx = load_context(ctx, storage)
 
     try:
@@ -701,6 +730,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we stop
+            print("Info: Will not add more edges")
             break
 
         # set colors for the edges to draw
@@ -810,14 +840,22 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
             edges_to_add.append((left, right))
             plt.close()
             G.add_edges_from(edges_to_add, color=color)
-            pos = nx.spring_layout(G, seed=200)
+            pos = nx.spring_layout(
+                G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+            )
+
+            x_values, y_values = zip(*pos.values())
+            x_max = max(x_values)
+            x_min = min(x_values)
+            x_margin = (x_max - x_min) * 0.3
+            plt.xlim(x_min - x_margin, x_max + x_margin)
             nx.draw(
                 G, pos, with_labels=True,
                 edge_color=colors, node_color="#4e9a06"
             )
             step += 1
             print("STEP", step)
-            plt.savefig(f"fixup_step_{step}_add_{left}_{right}.png")
+            plt.savefig(f"fixup_step_{step}_add_{left}_{right}.png", dpi=400)
             added_edges += edges_to_add
 
         all_components = list(nx.biconnected_components(G))
@@ -852,7 +890,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
         max_degree_node = next(sorted_max_degree_nodes)
 
         if max_degree <= max_repl_agreements:
-            print("Topology change done...")
+            print("Info: Will not remove more edges")
             break
 
         neighbors = sorted(
@@ -889,13 +927,21 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
         # print("to_remove:", remove)
 
         plt.close()
-        pos = nx.spring_layout(G, seed=200)
+        pos = nx.spring_layout(
+            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+        )
+
+        x_values, y_values = zip(*pos.values())
+        x_max = max(x_values)
+        x_min = min(x_values)
+        x_margin = (x_max - x_min) * 0.3
+        plt.xlim(x_min - x_margin, x_max + x_margin)
         step += 1
         G.remove_edge(*remove)
         nx.draw(
             G, pos, with_labels=True, edge_color=colors, node_color="#4e9a06"
         )
-        plt.savefig(f"fixup_step_{step}_rm_{remove[0]}_{remove[1]}.png")
+        plt.savefig(f"fixup_step_{step}_rm_{remove[0]}_{remove[1]}.png", dpi=400)
         # immidiately after removal recalculate
         sorted_nodes = sort_by_degree(G)
         max_degree = max(sorted_nodes, key=int)
@@ -907,12 +953,16 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
             continue
         else:
             print(
-                "Removal of the", removed[-1], "edge created "
-                "articulation point, adding back..."
+                "Warning: Removal of the", removed[-1], "edge created "
+                "articulation point"
             )
-            G.add_edge(removed[-1][0], removed[-1][1])
-            can_not_remove.append(removed[-1])
-            print("list to can not remove:", can_not_remove)
+            if add_while_removing:
+                pass  # TODO add function remove art point
+            else:
+                print(f"Info: Adding edge {removed[-1]} back")
+                G.add_edge(removed[-1][0], removed[-1][1])
+                can_not_remove.append(removed[-1])
+                print("list to can not remove:", can_not_remove)
 
     missing_segments = get_segments(added_edges)
     redundant_segments = get_segments(removed)
@@ -936,12 +986,23 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
         print("----------------------------------------")
 
         print("Saving result graph image")
+
         plt.close()
-        pos = nx.spring_layout(G, seed=200)
+        # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
+        pos = nx.spring_layout(
+            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+        )
+
+        x_values, y_values = zip(*pos.values())
+        x_max = max(x_values)
+        x_min = min(x_values)
+        x_margin = (x_max - x_min) * 0.3
+        plt.xlim(x_min - x_margin, x_max + x_margin)
         nx.draw(
             G, pos, with_labels=True, edge_color=colors, node_color="#4e9a06",
         )
-        plt.show()
+
+        plt.savefig("fixup.png", dpi=400)
 
         print("----------------------------------------")
 
