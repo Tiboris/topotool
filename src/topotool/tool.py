@@ -768,7 +768,7 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
     all_components = list(nx.biconnected_components(G))
 
-    while len(all_components) > 1:
+    while list(nx.articulation_points(G)):
         art_points = sorted(list(nx.articulation_points(G)), reverse=True)
 
         if len(list(nx.articulation_points(G))) == 0:
@@ -809,15 +809,15 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
             start = 0
             to_add = None
             while (
-                (not to_add or to_add in art_points)
+                not to_add  # and to_add not in art_points
                 and (start < len(to_pick_from))
             ):
                 to_add = to_pick_from[start]
+                print(to_add, to_pick_from)
                 start += 1
 
             # todo research
-            if to_add in art_points:
-                print(to_add, candidates)
+            # if to_add in art_points:
             #     sys.stderr.write(
             #         "Can not pick other node than the articulation point\n"
             #     )
@@ -850,7 +850,6 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
                         "Hint: Try adding --omit-max-degree option to add "
                         "edges even when maximum degree of node is reached\n"
                     )
-                continue
 
             if to_add in can_not_add:
                 neighs = G.neighbors(to_add)
