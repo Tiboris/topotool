@@ -7,6 +7,7 @@ import shelve
 
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 from numpy import sqrt
 from collections import Counter, OrderedDict
@@ -266,31 +267,46 @@ def produce_output_image(G, filename):
     plt.xlim(x_min - x_margin, x_max + x_margin)
 
     plot_nodes = {
-        "green": [],
-        "orange": [],
-        "red": [],
-        "yellow": [],
-        "pink": [],
+        "overloaded_art_points": {
+            "nodes": [],
+            "color": "orange",
+        },
+        "art_points": {
+            "nodes": [],
+            "color": "yellow",
+        },
+        "overloaded": {
+            "nodes": [],
+            "color": "red",
+        },
+        "one_edge": {
+            "nodes": [],
+            "color": "pink",
+        },
+        "complying_nodes": {
+            "nodes": [],
+            "color": "green",
+        },
     }
 
     for node in G:
         node_degree = nx.degree(G, node)
         if node in art_points and node_degree > 4:
-            plot_nodes["orange"].append(node)
+            plot_nodes["overloaded_art_points"]["nodes"].append(node)
         elif node in art_points:
-            plot_nodes["yellow"].append(node)
+            plot_nodes["art_points"]["nodes"].append(node)
         elif node_degree > 4:
-            plot_nodes["red"].append(node)
+            plot_nodes["overloaded"]["nodes"].append(node)
         elif node_degree == 1:
-            plot_nodes["pink"].append(node)
+            plot_nodes["one_edge"]["nodes"].append(node)
         else:
-            plot_nodes["green"].append(node)
+            plot_nodes["complying_nodes"]["nodes"].append(node)
 
-    for color, color_nodes in plot_nodes.items():
+    for node_type in plot_nodes:
         nx.draw_networkx_nodes(
             G, pos,
-            nodelist=color_nodes,
-            node_color=color,
+            nodelist=plot_nodes[node_type]["nodes"],
+            node_color=plot_nodes[node_type]["color"],
             node_size=500,
             alpha=0.8
         )
@@ -315,6 +331,17 @@ def produce_output_image(G, filename):
         labels[node] = node
 
     nx.draw_networkx_labels(G, pos, labels)
+
+    patches = []
+    for node_type in plot_nodes:
+        patches.append(
+            mpatches.Patch(
+                color=plot_nodes[node_type]["color"], label=node_type
+            )
+        )
+
+    plt.legend(handles=patches)
+
     plt.axis('off')
     if filename:
         plt.savefig(
@@ -769,6 +796,7 @@ def fixup(ctx, storage, max_repl_agreements,
 
     print("========================================")
     step = 0
+    produce_output_image(G, f"fixup_step_{step}_starting_with.png")
     # trying to remove articulation points
     added_edges = []
     can_not_add = []
@@ -881,7 +909,6 @@ def fixup(ctx, storage, max_repl_agreements,
             edge_to_add = (left, right)
             step += 1
             G.add_edges_from([edge_to_add], color=color)
-            print("STEP", step)
             produce_output_image(
                 G, f"fixup_step_{step}_add_{left}_{right}.png"
             )
@@ -1006,7 +1033,7 @@ def fixup(ctx, storage, max_repl_agreements,
         print("Saving result graph image")
 
         produce_output_image(
-            G, "fixup.png"
+            G, "fixup_result.png"
         )
 
         print("----------------------------------------")
@@ -1028,7 +1055,7 @@ def fixup(ctx, storage, max_repl_agreements,
         ))
 
         # Generate fixup playbook
-        fixup = "fixup.yml"
+        fixup = "fixup_result.yml"
         fixup_data = fixup_playbook.render(
             missing=missing_segments,
             redundant=redundant_segments,
