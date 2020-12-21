@@ -813,15 +813,8 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
                 and (start < len(to_pick_from))
             ):
                 to_add = to_pick_from[start]
-                print(to_add, to_pick_from)
+                # print(to_add, to_pick_from)
                 start += 1
-
-            # todo research
-            # if to_add in art_points:
-            #     sys.stderr.write(
-            #         "Can not pick other node than the articulation point\n"
-            #     )
-            #     sys.exit(5)
 
             min_degree = nx.degree(G, to_add)
 
