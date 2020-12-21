@@ -736,7 +736,12 @@ def fixup(ctx, storage, max_repl_agreements, omit_max_degree):
             if not components:
                 break
 
-            comp = all_components.pop()
+            try:
+                comp = all_components.pop()
+            except IndexError:
+                sys.stderr.write("No more components to try connecting\n")
+                sys.exit(2)
+
             #  get dictionary with keys corresponding to degrees and each key
             # will have a list of node with following degree as value
             sorted_nodes = sort_by_degree(G, nodes=comp, reverse=False)
