@@ -7,7 +7,7 @@ import shelve
 
 import networkx as nx
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 
 from numpy import sqrt
 from collections import Counter, OrderedDict
@@ -247,7 +247,7 @@ def produce_output_image(G, filename):
     pos = nx.spring_layout(
         G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
     )
-
+    # https://stackoverflow.com/questions/50453043/networkx-drawing-label-partially-outside-the-box
     x_values, y_values = zip(*pos.values())
     x_max = max(x_values)
     x_min = min(x_values)
@@ -323,14 +323,17 @@ def produce_output_image(G, filename):
     patches = []
     for node_type in plot_nodes:
         patches.append(
-            mpatches.Patch(
-                color=plot_nodes[node_type]["color"], label=node_type
+            mlines.Line2D(
+                [0], [0], marker='o', alpha=0.8, markersize=15, color='w',
+                markerfacecolor=plot_nodes[node_type]["color"],
+                label=node_type,
+                # https://matplotlib.org/gallery/text_labels_and_annotations/custom_legends.html#sphx-glr-gallery-text-labels-and-annotations-custom-legends-py
             )
         )
 
     plt.legend(handles=patches)
 
-    plt.axis('off')
+    plt.axis("off")
     if filename:
         plt.savefig(
             os.path.abspath(filename),
