@@ -172,7 +172,18 @@ def load(ctx, input_file, data_format, master, storage):
         ctx.obj[GRAPH_DATA] = f.read().splitlines()
 
     data = deepcopy(ctx.obj[GRAPH_DATA])
-    graph_data = Graph(data, data_format=data_format)
+    try:
+        graph_data = Graph(data, data_format=data_format)
+    except ValueError:
+        sys.stderr.write(
+            "Loading topology from file failed, please check the input file\n"
+        )
+        sys.exit(1)
+    except Exception:
+        sys.stderr.write(
+            "Unexpected input file error\n"
+        )
+        sys.exit(9)
 
     ctx.obj[GRAPH_OBJECT] = graph_data
 
@@ -185,6 +196,13 @@ def load(ctx, input_file, data_format, master, storage):
 
     ctx.obj[GRAPH_NX] = G
     ctx.obj[MASTER] = master
+
+    if nx.number_connected_components(G) != 1:
+        sys.stderr.write(
+            "Loaded topology is disconnected, please "
+            "check your topology and load it again.\n"
+        )
+        sys.exit(1)
 
     sys.stdout.write("Loading of topology done\n")
 
