@@ -1,0 +1,65 @@
+------------------
+12 segments matched
+------------------
+  Segment name: y0.ipadomain.test-to-y1x0.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x0.ipadomain.test
+  Connectivity: both
+
+  Segment name: y0.ipadomain.test-to-y1x4.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x4.ipadomain.test
+  Connectivity: both
+
+  Segment name: y0.ipadomain.test-to-y1x1.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x1.ipadomain.test
+  Connectivity: both
+
+  Segment name: y0.ipadomain.test-to-y1x3.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x3.ipadomain.test
+  Connectivity: both
+
+  Segment name: y1x0.ipadomain.test-to-y2.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x2.ipadomain.test
+  Connectivity: both
+
+  Segment name: y0.ipadomain.test-to-y1x3.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x3.ipadomain.test
+  Connectivity: both
+
+  Segment name: y0.ipadomain.test-to-y1x3.ipadomain.test
+  Left node: y0.ipadomain.test
+  Right node: y1x3.ipadomain.test
+  Connectivity: both
+
+  Segment name: y1x0.ipadomain.test-to-y1x1.ipadomain.test
+  Left node: y1x0.ipadomain.test
+  Right node: y1x1.ipadomain.test
+  Connectivity: both
+
+  Segment name: y1x1.ipadomain.test-to-y1x2.ipadomain.test
+  Left node: y1x1.ipadomain.test
+  Right node: y1x2.ipadomain.test
+  Connectivity: both
+
+  Segment name: y1x2.ipadomain.test-to-y1x3.ipadomain.test
+  Left node: y1x2.ipadomain.test
+  Right node: y1x3.ipadomain.test
+  Connectivity: both
+
+  Segment name: y1x3.ipadomain.test-to-y1x4.ipadomain.test
+  Left node: y1x3.ipadomain.test
+  Right node: y1x4.ipadomain.test
+  Connectivity: both
+
+  Segment name: y1x4.ipadomain.test-to-y1x0.ipadomain.test
+  Left node: y1x4.ipadomain.test
+  Right node: y1x0.ipadomain.test
+  Connectivity: both
+----------------------------
+Number of entries returned 12
+----------------------------

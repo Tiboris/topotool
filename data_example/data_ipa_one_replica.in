@@ -1,0 +1,10 @@
+------------------
+1 segments matched
+------------------
+  Segment name: master.ipadomain.test-to-replica.ipadomain.test
+  Left node: master.ipadomain.test
+  Right node: replica.ipadomain.test
+  Connectivity: both
+----------------------------
+Number of entries returned 1
+----------------------------
