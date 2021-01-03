@@ -239,19 +239,26 @@ def generate(ctx, storage, branches, length, nodes, master):
             db[key] = ctx.obj[key]
 
 
-def produce_output_image(G, filename):
+def produce_output_image(G, filename=None):
     plt.close()
-
     art_points = list(nx.articulation_points(G))
+
+    draw_edges = list(G.edges)
+
+    for edge in G.edges:
+        draw_edges.append((edge[1], edge[0]))
+
+    DiG = nx.DiGraph(draw_edges)
     # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
     pos = nx.spring_layout(
         G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
     )
     # https://stackoverflow.com/questions/50453043/networkx-drawing-label-partially-outside-the-box
-    x_values, y_values = zip(*pos.values())
+    plt.figure(figsize=(11, 7))
+    x_values, _y_values = zip(*pos.values())
     x_max = max(x_values)
     x_min = min(x_values)
-    x_margin = (x_max - x_min) * 0.3
+    x_margin = (x_max - x_min) * 0.2
     plt.xlim(x_min - x_margin, x_max + x_margin)
 
     plot_nodes = {
@@ -295,23 +302,27 @@ def produce_output_image(G, filename):
             G, pos,
             nodelist=plot_nodes[node_type]["nodes"],
             node_color=plot_nodes[node_type]["color"],
-            node_size=500,
-            alpha=0.8
+            node_size=700,
+            alpha=0.85
         )
 
     # set colors for the edges to draw
     colors = []
-    for u, v in G.edges():
+    for u, v in DiG.edges():
         try:
             colors.append(G[u][v]["color"])
         except KeyError:
-            colors.append("black")
+            colors.append("#ff7f0e")  # orange from FreeIPA
 
     nx.draw_networkx_edges(
-        G, pos,
+        DiG, pos,
         edge_color=colors,
-        edgelist=G.edges
-    )
+        edgelist=DiG.edges,
+        width=3.0,
+        arrows=True,
+        arrowstyle="-|>",
+        arrowsize=20
+    )  # this HAX (DiGraph) is needed for arrows to be in drawings
 
     labels = {}
 
@@ -337,7 +348,7 @@ def produce_output_image(G, filename):
     if filename:
         plt.savefig(
             os.path.abspath(filename),
-            dpi=400
+            dpi=100
         )
     else:
         plt.show()
@@ -357,6 +368,7 @@ def draw(ctx, storage):
         sys.exit(1)
 
     produce_output_image(G, filename="topology_drawing.png")
+    produce_output_image(G)
 
 
 def get_segments(edges):
@@ -782,7 +794,7 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
         # pick articulation point to solve issue for FIXME
         art_point = art_points.pop()
 
-        color = "green"  # default added edge color
+        color = "#90ee90"  # default light green added edge color
 
         # we build list of candidates
         candidates = []
@@ -828,7 +840,7 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
                 added = False
                 if omit_max_degree:
                     candidates.append(to_add)
-                    color = "orange"
+                    color = "#0277bd"  # blue edge color
                     added = True
                 else:
                     can_not_add.append(to_add)
