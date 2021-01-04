@@ -457,8 +457,10 @@ def produce_output_image(G, filename=None):
 
 @graphcli.command()
 @click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-i", "--interactive", is_flag=True)
+@click.option("-f", "--filename")
 @click.pass_context
-def draw(ctx, storage):
+def draw(ctx, storage, interactive, filename):
     """Create a topology graph picture."""
     ctx = load_context(ctx, storage)
 
@@ -468,8 +470,14 @@ def draw(ctx, storage):
         sys.stderr.write("Please load or generate the topology first\n")
         sys.exit(1)
 
-    produce_output_image(G, filename="topology_drawing.png")
-    # produce_output_image(G)
+    if interactive:
+        produce_output_image(G)
+
+    if not interactive and not filename:
+        produce_output_image(G, filename="topology_drawing.png")
+
+    if filename:
+        produce_output_image(G, filename=filename)
 
 
 def get_segments(edges):
