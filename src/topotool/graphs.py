@@ -68,7 +68,7 @@ class Graph:
             delim = "|"
             self._parse_ipa_segments(data, delimiter=delim)
         elif data_format == "edges":
-            delim = "-"
+            delim = "|"
             self._parse_vertices(data, delimiter=",")
             self._parse_edge_connections(data, delim, weight_delim)
         else:
