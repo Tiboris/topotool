@@ -262,6 +262,13 @@ def load(ctx, input_file, data_format, master, storage):
     for vertex in graph_data.vertices:
         G.add_node(vertex)
 
+    if master not in G:
+        sys.stderr.write(
+            f"Loaded topology does not contain {master} master node,"
+            " please specify master node using option `--master`\n"
+        )
+        sys.exit(1)
+
     G.add_edges_from(graph_data.edge_list)
 
     ctx.obj[GRAPH_NX] = G
