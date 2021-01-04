@@ -118,7 +118,10 @@ class Graph:
             for _ in range(3):
                 del data[0]
         else:
-            raise Error("Unexpected file content, expects '---' at file start")
+            raise Error(
+                "Unexpected file content, FreeIPA input "
+                " pareser expects '---' at file start"
+            )
 
         segments_cnt = 0
 

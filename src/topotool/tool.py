@@ -14,6 +14,7 @@ from numpy import sqrt
 from collections import Counter, OrderedDict
 from topotool.graphs import Graph
 from copy import deepcopy
+from copy import Error
 from jinja2 import Template
 from itertools import chain
 
@@ -247,6 +248,11 @@ def load(ctx, input_file, data_format, master, storage):
     except ValueError:
         sys.stderr.write(
             "Loading topology from file failed, please check the input file\n"
+        )
+        sys.exit(1)
+    except Error as e:
+        sys.stderr.write(
+            f"Input error: {e}\n"
         )
         sys.exit(1)
     except Exception:
