@@ -201,12 +201,16 @@ def create_basic_topo(max_width, max_levels):
 
 
 @click.group(chain=True)
-@click.option("--debug", default=False, is_flag=True)
-@click.option("-s", "--storage", default="./.graph_storage.json")
-@click.option("-o", "--output", default="./graph_out")
+@click.option(
+    "-s", "--storage", default="./.graph_storage.json",
+    help="Location of the context db json file",
+    show_default=True
+)
 @click.pass_context
-def graphcli(ctx, storage, output, debug):
-    """graphcli tool for topology"""
+def graphcli(ctx, storage):
+    """
+    topotool - a tool for tweaking and deploying FreeIPA replication topology
+    """
     ctx = load_context(ctx, storage)
 
 
@@ -231,7 +235,7 @@ def predecessors_from_first_levels(levels):
 )
 @click.pass_context
 def load(ctx, input_file, data_format, master, storage):
-    """Loads grap data to dictionary"""
+    """Loads grap data to context dictionary"""
     ctx.ensure_object(dict)
 
     with open(input_file, "r") as f:
@@ -442,7 +446,7 @@ def produce_output_image(G, filename=None):
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
 def draw(ctx, storage):
-    """Draw a topology graph as picture."""
+    """Create a topology graph picture."""
     ctx = load_context(ctx, storage)
 
     try:
@@ -614,7 +618,7 @@ def print_topology(topology):
     help="ansible-freeipa-custom-repo"
 )
 @click.pass_context
-def jenkins_topology(
+def deployment(
     ctx, jenkins_template, out_dir, storage, node_os,
     idm_ci, repo_branch, tool_repo, tool_branch, project, run, job,
     metadata_storage, base_metadata, inventory, ansible_install,
@@ -622,6 +626,9 @@ def jenkins_topology(
     ansible_freeipa_upstream_copr, ansible_freeipa_downstream_copr,
     ansible_freeipa_custom_repo,
 ):
+    """
+    Generate deployment files for the Jenkins automation using jinja templates
+    """
     ctx = load_context(ctx, storage)
 
     try:
@@ -794,10 +801,12 @@ def sort_by_degree(G, nodes=None, reverse=False):
 
 
 @graphcli.command()
-@click.option("-o", "--output", default="./topology_playbook")
 @click.option("-s", "--storage", default="./.graph_storage.json")
 @click.pass_context
-def analyze(ctx, storage, output):
+def analyze(ctx, storage):
+    """
+    Print infromation about loaded topology graph.
+    """
     ctx = load_context(ctx, storage)
 
     try:
@@ -1092,6 +1101,9 @@ def remove_overloaded_nodes_edges(
 @click.pass_context
 def fixup(ctx, storage, max_repl_agreements,
           omit_max_degree, add_while_removing):
+    """
+    Generate an Ansible automation to remove weak spots from the topology.
+    """
     ctx = load_context(ctx, storage)
 
     try:
