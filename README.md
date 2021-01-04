@@ -23,7 +23,7 @@ Commands:
 
 ```
 
-## Istallation of the tool
+## Installation of the tool
 
 ```
 git clone https://github.com/Tiboris/topotool.git
@@ -80,7 +80,7 @@ We can load the existing topology from the IPA or a custom from file containing 
 An option `-m/--master` should be used to mark the first FreeIPA server from the topology.
 Default is set to `--master=y0`
 
-Load a existing topology from the ipa topologysegement-find output (e.g [data_example/data_deployment.in](data_example/data_deployment.in)):
+Load a existing topology from the ipa topologysegement-find output (e.g [data_example/data_ipa_deployment.in](data_example/data_ipa_deployment.in)):
 ```
 $ topotool load --master=y0.ipadomain.test ../data_example/data_deployment.in
 # or the same using the type
@@ -89,9 +89,9 @@ $ topotool load --type=ipa --master=y0.ipadomain.test ../data_example/data_deplo
 Default behaviour is to load the ipa command output structured file, however we can load custom topology from a file.
 
 You can define a topology by only edges and can load it to topotool.
-An example file is in [data_example/data_2loops.in](data_example/data2loops.in)
+An example file is in [data_example/data_custom_2.in](data_example/data_custom_2.in)
 ```
-$ topotool load --type=edges ../data_example/data_2loops.in
+$ topotool load --type=edges ../data_example/data_custom_2.in
 ```
 The file format should follow the example one and first line (edge list) is optional.
 Connection (edge) list should be a node names separated by `|` which is a parser delimiter for the edge.

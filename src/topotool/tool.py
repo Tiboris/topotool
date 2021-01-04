@@ -287,11 +287,11 @@ def load(ctx, input_file, data_format, master, storage):
         )
         sys.exit(1)
 
-    sys.stdout.write("Loading of topology done\n")
-
     with shelve.open(storage) as db:
         for key in ctx.obj:
             db[key] = ctx.obj[key]
+
+    print("Topology has been loaded to shelve storage")
 
 
 @graphcli.command()
@@ -320,6 +320,11 @@ def generate(ctx, storage, branches, length, nodes, master):
     """Generate a topology graph based on options."""
     topo = {}
     if nodes:
+        if branches or length:
+            print(
+                "Info: option --nodes has been passed, ignoring options "
+                "--branches and --length"
+            )
         G = circ_topo(nodes, master)
     else:
         if not branches:
@@ -338,6 +343,8 @@ def generate(ctx, storage, branches, length, nodes, master):
     with shelve.open(storage) as db:
         for key in ctx.obj:
             db[key] = ctx.obj[key]
+
+    print("Topology has been generated to shelve storage")
 
 
 def produce_output_image(G, filename=None):
@@ -475,9 +482,11 @@ def draw(ctx, storage, interactive, filename):
 
     if not interactive and not filename:
         produce_output_image(G, filename="topology_drawing.png")
+        print("Image stored to file topology_drawing.png")
 
     if filename:
         produce_output_image(G, filename=filename)
+        print(f"Image stored to file {filename}")
 
 
 def get_segments(edges):
@@ -826,7 +835,7 @@ def sort_by_degree(G, nodes=None, reverse=False):
 @click.pass_context
 def analyze(ctx, storage):
     """
-    Print infromation about loaded topology graph.
+    Print information about loaded topology graph.
     """
     ctx = load_context(ctx, storage)
 
@@ -839,35 +848,43 @@ def analyze(ctx, storage):
 
     print("----------------------------------------")
     print("General graph information:\n" + str(nx.info(G)))
-    print("Connected components:\t" + str(nx.number_connected_components(G)))
+    print(
+        "Number of connected components:\t" + str(
+            nx.number_connected_components(G)
+        )
+    )
     print("----------------------------------------")
-    print("Analyzing nodes as standalone entity...")
+    print("Analyzing replicas as standalone entity...")
     print("--------------------")
     issues = []
     for node in G:
         repl_agreements = nx.degree(G, node)
 
         if repl_agreements < 2:
-            issues.append(f"Less than 2 replication agreemenst\t| {node}")
+            issues.append(f"One replication agreement\t| {node}")
 
         if repl_agreements > MAX_REPL_AGREEMENTS:
             issues.append(
                 f"More than {MAX_REPL_AGREEMENTS} "
-                f"replication agreemenst\t| {node}"
+                f"replication agreements\t| {node}"
             )
 
     if issues:
-        print("ISSUE\t\t\t\t\t| NODE")
+        print("ISSUE\t\t\t\t\t| REPLICA")
         print("-----\t\t\t\t\t| ----")
         for issue in issues:
             print(issue)
     else:
-        print("No issues found for the nodes.")
+        print("No issues found for the replicas.")
 
     print("----------------------------------------")
     print("Analyzing topology connectivity...")
     print("--------------------")
     print("Looking for articulation points...")
+    print(
+            "Note: Optimal FreeIPA replication topology should "
+            "not contain any articulation point"
+        )
 
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
     components = list(nx.biconnected_components(G))
@@ -878,7 +895,11 @@ def analyze(ctx, storage):
 
         print(f"Articulation point(s) found: {len(art_points)}")
         print("--------------------")
-        print("Looking for biconected components...")
+        print("Looking for biconnected components...")
+        print(
+            "Note: Optimal FreeIPA replication topology should "
+            "contain one biconnected component"
+        )
 
         for comp in components:
             print(f"Biconected component: {comp}")
@@ -902,7 +923,9 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we stop
-            sys.stdout.write("Info: Will not add more edges\n")
+            sys.stdout.write(
+                "Info: Will not add more replication agreements\n"
+            )
             break
 
         # pick articulation point to solve issue for FIXME
@@ -920,7 +943,9 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
             try:
                 comp = all_components.pop()
             except IndexError:
-                sys.stderr.write("No more components left to try connecting\n")
+                sys.stderr.write(
+                    "No more topology components left to try connecting\n"
+                )
                 sys.exit(2)
 
             # get dictionary with keys corresponding to degrees and each key
@@ -961,7 +986,8 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
                 added_str = "Added" if added else "Did not add"
                 sys.stdout.write(
-                    f"Warning: {added_str} {color} edge to connect component "
+                    f"Warning: {added_str} replication agreement"
+                    " to connect component "
                     f"({comp}) with articulation point {art_point} "
                     f"{to_add} has {max_repl_agreements} "
                     "or more replication agreements\n"
@@ -970,7 +996,8 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
                 if not added and to_add in can_not_add:
                     sys.stdout.write(
                         "Hint: Try adding --omit-max-degree option to add "
-                        "edges even when maximum degree of node is reached\n"
+                        "replication agreement even when maximum "
+                        " degree of node is reached\n"
                     )
 
             if to_add in can_not_add:
@@ -996,11 +1023,11 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
         all_components = list(nx.biconnected_components(G))
 
     print("----------------------------------------")
-    print("Added edges:")
+    print("Added replication agreement(s):")
     for edge in added_edges:
         print(edge)
 
-    print(f"Added edge(s) count: {len(added_edges)}")
+    print(f"Added replication agreement(s) count: {len(added_edges)}")
     print("----------------------------------------")
 
     return G, added_edges, step
@@ -1025,7 +1052,9 @@ def remove_overloaded_nodes_edges(
         max_degree_node = next(sorted_max_degree_nodes)
 
         if max_degree <= max_repl_agreements:
-            sys.stdout.write("Info: Will not remove more edges\n")
+            sys.stdout.write(
+                "Info: Will not remove more replication agreements\n"
+            )
             break
 
         neighbors = sorted(
@@ -1046,7 +1075,7 @@ def remove_overloaded_nodes_edges(
 
         if remove in can_not_remove:
             sys.stderr.write(
-                "Error: Can not remove any edge without "
+                "Error: Can not remove any replication agreement without "
                 "creating articulation points\n"
             )
             sys.stderr.write(
@@ -1056,7 +1085,9 @@ def remove_overloaded_nodes_edges(
             sys.exit(4)
 
         if remove in removed:
-            sys.stderr.write(f"Error: Edge already removed - {remove}\n")
+            sys.stderr.write(
+                f"Error: Replication agreement already removed - {remove}\n"
+            )
             sys.exit(4)
 
         if remove:
@@ -1077,8 +1108,8 @@ def remove_overloaded_nodes_edges(
             continue
         else:
             sys.stdout.write(
-                f"Warning: Removal of the {removed[-1]} edge created "
-                "articulation point\n"
+                f"Warning: Removal of the {removed[-1]} replication "
+                "agreement created articulation point\n"
             )
             if add_while_removing:
                 sys.stdout.write(
@@ -1097,17 +1128,20 @@ def remove_overloaded_nodes_edges(
                         or (new[1], new[0]) in removed
                     ):
                         sys.stderr.write(
-                            f"Error Added edge {new} has been found in"
-                            f"already removed list: {removed}\n"
+                            f"Error Added replication agreement {new} has been"
+                            f" found in already removed list: {removed}\n"
                         )
                         sys.exit(4)
 
             else:
-                sys.stdout.write(f"Info: Adding edge {removed[-1]} back\n")
+                sys.stdout.write(
+                    f"Info: Adding replication agreement {removed[-1]} back\n"
+                )
                 G.add_edge(removed[-1][0], removed[-1][1])
                 can_not_remove.append(removed[-1])
                 sys.stdout.write(
-                    f"List of edges that we can not remove: {can_not_remove}\n"
+                    "List of replication agreements "
+                    f"which we can not remove: {can_not_remove}\n"
                 )
 
     return G, removed, added_edges, step
@@ -1158,25 +1192,28 @@ def fixup(ctx, storage, max_repl_agreements,
     redundant_segments = get_segments(removed)
 
     print("----------------------------------------")
-    print("Removed edges:")
+    print("Removed replication agreement(s):")
     for edge in removed:
         print(edge)
 
-    print(f"Removed edge(s) count: {len(removed)}")
+    print(f"Removed replication agreement(s) count: {len(removed)}")
     print("----------------------------------------")
 
     print("Summary:")
 
     if missing_segments or redundant_segments:
-        print(f"Added edge(s) [{len(added_edges)}]:")
+        print(f"Added replication agreement(s) [{len(added_edges)}]:")
         for edge in added_edges:
             print(edge)
-        print(f"Removed edge(s) [{len(removed)}] :")
+        print(f"Removed replication agreement(s) [{len(removed)}]:")
         for edge in removed:
             print(edge)
 
         # intersection should be empty in perfect case
-        print("Edges intersection:", set(added_edges).intersection(set(removed)))
+        print(
+            "Replication agreement intersection:",
+            set(added_edges).intersection(set(removed))
+        )
 
         print("----------------------------------------")
 
