@@ -4,6 +4,7 @@ import os
 import click
 import sys
 import shelve
+import operator
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -81,8 +82,73 @@ def gen_metadata(topo_nodes, node_os, destination,
     save_data(output_file, metadata)
 
 
-def generate_topo(nodes):
-    raise NotImplementedError()
+def circ_topo(node_cnt, master="y0"):
+    """Experimental approach we need to half the topology"""
+    nodes = []
+    for i in range(node_cnt):
+        # FIXME master is not y0 ?
+        nodes.append(f"{master[0]}{i}")
+
+    G = nx.cycle_graph(nodes)
+
+    # this connects the most distant node
+
+    res = nx.single_source_dijkstra_path_length(G, master)
+
+    max_dct = {
+        "dist": 0,
+        "node": master
+    }
+
+    for node, distance in res.items():
+        # print("Node", node, "distance from master", distance)
+        if distance > max_dct["dist"]:
+            max_dct["dist"] = distance
+            max_dct["node"] = node
+
+    G.add_edge(max_dct["node"], master)
+
+    # FIXME this again would add 4th repl agreement to y5
+    degrees = dict(G.degree())
+    sum_of_edges = sum(degrees.values())
+
+    avg_degree = sum_of_edges/len(G)
+    # produce_output_image(G)
+    # 2.4 works fine with 10 nodes
+    while avg_degree < 2.4:
+
+        eccentricity = nx.eccentricity(G)
+
+        # print(eccentricity)
+
+        max_eccentricity_node = max(
+            eccentricity.items(), key=operator.itemgetter(1)
+        )[0]
+
+        next_node = None
+
+        for node in eccentricity:
+            if eccentricity[node] >= eccentricity[max_eccentricity_node]:
+                if node != max_eccentricity_node:
+                    if not G.has_edge(node, max_eccentricity_node):
+                        dst = nx.shortest_path(G, node, max_eccentricity_node)
+                        # print(node, max_eccentricity_node)
+                        # print(dst)
+                        if len(dst) >= eccentricity[max_eccentricity_node]:
+                            next_node = node
+                            break
+
+        if next_node is None:
+            raise Exception("excenricity node pair not found")
+
+        G.add_edge(next_node, max_eccentricity_node)
+        degrees = dict(G.degree())
+        sum_of_edges = sum(degrees.values())
+
+        avg_degree = sum_of_edges/len(G)
+        # produce_output_image(G)
+
+    return G
 
 
 def create_level(level, max_levels, level_width):
@@ -225,7 +291,7 @@ def load(ctx, input_file, data_format, master, storage):
 )
 @click.option(
     "--nodes", "-n",
-    type=click.IntRange(1, 60),
+    type=click.IntRange(5, 60),
     help="Needed number of topology nodes length <3-60> (server count)."
 )
 @click.option(
@@ -237,7 +303,7 @@ def generate(ctx, storage, branches, length, nodes, master):
     """Generate a topology graph based on options."""
     topo = {}
     if nodes:
-        topo = generate_topo(nodes)
+        G = circ_topo(nodes, master)
     else:
         if not branches:
             branches = 3
@@ -245,8 +311,8 @@ def generate(ctx, storage, branches, length, nodes, master):
             length = 3
         topo = create_basic_topo(max_width=branches, max_levels=length)
 
-    G = nx.Graph()
-    G.add_edges_from(topo["edges"])
+        G = nx.Graph()
+        G.add_edges_from(topo["edges"])
 
     ctx.obj[GRAPH_NX] = G
     ctx.obj[GRAPH_DATA] = None
@@ -386,7 +452,7 @@ def draw(ctx, storage):
         sys.exit(1)
 
     produce_output_image(G, filename="topology_drawing.png")
-    produce_output_image(G)
+    # produce_output_image(G)
 
 
 def get_segments(edges):
