@@ -1106,7 +1106,9 @@ def remove_overloaded_nodes_edges(
                 sys.stdout.write(f"Info: Adding edge {removed[-1]} back\n")
                 G.add_edge(removed[-1][0], removed[-1][1])
                 can_not_remove.append(removed[-1])
-                sys.stdout.write(f"list to can not remove: {can_not_remove}")
+                sys.stdout.write(
+                    f"List of edges that we can not remove: {can_not_remove}\n"
+                )
 
     return G, removed, added_edges, step
 
@@ -1172,8 +1174,9 @@ def fixup(ctx, storage, max_repl_agreements,
         print(f"Removed edge(s) [{len(removed)}] :")
         for edge in removed:
             print(edge)
-        # Difference should be empty
-        print("Difference:", set(added_edges).intersection(set(removed)))
+
+        # intersection should be empty in perfect case
+        print("Edges intersection:", set(added_edges).intersection(set(removed)))
 
         print("----------------------------------------")
 

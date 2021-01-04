@@ -27,9 +27,10 @@ Commands:
 
 ```
 git clone https://github.com/Tiboris/topotool.git
+cd topotool
 mkdir venv
-python3 -m venv .
 cd venv
+python3 -m venv .
 source ./bin/activate
 pip3 install -e ..
 ```
@@ -63,7 +64,7 @@ Added edge(s) [1]:
 Removed edge(s) [2] :
 ('y0', 'y1x0')
 ('y2', 'y1x1')
-Difference: set()
+Edges intersection: set()
 ----------------------------------------
 Saving result graph image
 ----------------------------------------
@@ -132,15 +133,69 @@ $ topotool analyze
 A prerequisite to run this commands is either to load or generate the topology.
 
 The `fixup` command aims to update the topology replication graph so the topology follows the FreeIPA best practices for the replication agreements.
-An exaple run for the pre-generated topology with options `--branches=5 --length=3`
+An exaple run for the pre-generated topology with options `--branches=5 --length=3`:
 ```
 $ topotool fixup
+========================================
+----------------------------------------
+Added edges:
+Added edge(s) count: 0
+----------------------------------------
+Warning: Removal of the ('y0', 'y1x0') edge created articulation point
+Info: Trying to fix new articulation points
+----------------------------------------
+Added edges:
+('y1x1', 'y1x0')
+Added edge(s) count: 1
+----------------------------------------
+----------------------------------------
+Removed edges:
+('y0', 'y1x0')
+('y2', 'y1x1')
+Removed edge(s) count: 2
+----------------------------------------
+Summary:
+Added edge(s) [1]:
+('y1x1', 'y1x0')
+Removed edge(s) [2] :
+('y0', 'y1x0')
+('y2', 'y1x1')
+Edges intersection: set()
+----------------------------------------
+Saving result graph image
+----------------------------------------
+Saving result graph data
+----------------------------------------
+Generating fixup playbook
+========================================
 ```
 Output is a pictures of the fixed graph topology, step by step pictures, and playbook which can be run on system to apply these changes to the deployed topology.
 
 
 ### Running deployment command
 
-#TBA
-
-### Running fixup
+This is an exaple of generating jenkind deployment for the pre-generated topology with options `--branches=5 --length=3`:
+```
+$ topotool generate --length=3 --branches=5 deployment
+Create temporary FILES folder
+Generate Jenkinsfile for whole topology
+                y0
+y1x0    y1x1    y1x2    y1x3    y1x4
+                y2
+Generate metadata for topology nodes
+Generate ansible-freeipa inventory file
+Generate ansible-freeipa install file
+```
+The same result can be done using:
+```
+$ topotool generate --length=3 --branches=5 deployment
+Create temporary FILES folder
+Generate Jenkinsfile for whole topology
+                y0
+y1x0    y1x1    y1x2    y1x3    y1x4
+                y2
+Generate metadata for topology nodes
+Generate ansible-freeipa inventory file
+Generate ansible-freeipa install file
+```
+In the FILES folder we can find all the files required to deploy the FreeIPA cluster.
