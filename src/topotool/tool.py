@@ -114,6 +114,16 @@ def circ_topo(node_cnt, master="y0"):
     sum_of_edges = sum(degrees.values())
 
     avg_degree = sum_of_edges/len(G)
+
+    # FIXME use distance that is the most distant node
+    #     and half the index for next node
+    # eg. first is circle of 10 then 0-5
+    # dist is 5
+    # we take 5/2 which is 2.5
+    # we round it,
+    # connect 3 with 3+max dst
+    # repeat while newindex > 2 or while avg degree is smth
+
     # produce_output_image(G)
     # 2.4 works fine with 10 nodes
     while avg_degree < 2.4:
@@ -203,8 +213,8 @@ def create_basic_topo(max_width, max_levels):
 
 @click.group(chain=True)
 @click.option(
-    "-s", "--storage", default="./.graph_storage.json",
-    help="Location of the context db json file",
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Location of the context db file",
     show_default=True
 )
 @click.pass_context
@@ -229,7 +239,7 @@ def predecessors_from_first_levels(levels):
 @graphcli.command()
 @click.argument("input_file")
 @click.option("-m", "--master", default="y0")
-@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-s", "--storage", default="./.graph_storage.db")
 @click.option(
     "-t", "--type", "data_format", default="ipa",
     type=click.Choice(["ipa", "edges"]),
@@ -295,7 +305,7 @@ def load(ctx, input_file, data_format, master, storage):
 
 
 @graphcli.command()
-@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-s", "--storage", default="./.graph_storage.db")
 @click.option(
     "--branches", "-x",
     type=click.IntRange(3, 20),
@@ -400,7 +410,7 @@ def produce_output_image(G, filename=None):
             plot_nodes["art_points"]["nodes"].append(node)
         elif node_degree > 4:
             plot_nodes["overloaded"]["nodes"].append(node)
-        elif node_degree == 1:
+        elif node_degree == 1 and not len(G) == 2:
             plot_nodes["one_edge"]["nodes"].append(node)
         else:
             plot_nodes["complying_nodes"]["nodes"].append(node)
@@ -463,7 +473,7 @@ def produce_output_image(G, filename=None):
 
 
 @graphcli.command()
-@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-s", "--storage", default="./.graph_storage.db")
 @click.option("-i", "--interactive", is_flag=True)
 @click.option("-f", "--filename")
 @click.pass_context
@@ -529,7 +539,7 @@ def print_topology(topology):
 
 @graphcli.command()
 @click.option("-d", "--out-dir", default="./FILES")
-@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-s", "--storage", default="./.graph_storage.db")
 @click.option(
     "-j", "--jenkins-template", type=click.Path(exists=True),
     default=os.path.join(
@@ -657,7 +667,7 @@ def deployment(
     ansible_freeipa_custom_repo,
 ):
     """
-    Generate deployment files for the Jenkins automation using jinja templates
+    Generate deployment files for the Jenkins automation.
     """
     ctx = load_context(ctx, storage)
 
@@ -831,7 +841,7 @@ def sort_by_degree(G, nodes=None, reverse=False):
 
 
 @graphcli.command()
-@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-s", "--storage", default="./.graph_storage.db")
 @click.pass_context
 def analyze(ctx, storage):
     """
@@ -869,9 +879,9 @@ def analyze(ctx, storage):
                 f"replication agreements\t| {node}"
             )
 
-    if issues:
-        print("ISSUE\t\t\t\t\t| REPLICA")
-        print("-----\t\t\t\t\t| ----")
+    if issues and not len(G) == 2:
+        print("ISSUE\t\t\t\t| REPLICA")
+        print("-----\t\t\t\t| ----")
         for issue in issues:
             print(issue)
     else:
@@ -1154,12 +1164,12 @@ def remove_overloaded_nodes_edges(
 )
 @click.option("--omit-max-degree", is_flag=True, default=False)
 @click.option("--add-while-removing", is_flag=True, default=False)
-@click.option("-s", "--storage", default="./.graph_storage.json")
+@click.option("-s", "--storage", default="./.graph_storage.db")
 @click.pass_context
 def fixup(ctx, storage, max_repl_agreements,
           omit_max_degree, add_while_removing):
     """
-    Generate an Ansible automation to remove weak spots from the topology.
+    Generate an Ansible automation to remove topology (weak spots.
     """
     ctx = load_context(ctx, storage)
 
