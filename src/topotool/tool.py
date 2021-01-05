@@ -10,6 +10,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 
+from math import ceil
 from numpy import sqrt
 from collections import Counter, OrderedDict
 from topotool.graphs import Graph
@@ -109,11 +110,11 @@ def circ_topo(node_cnt, master="y0"):
 
     G.add_edge(max_dct["node"], master)
 
-    # FIXME this again would add 4th repl agreement to y5
     degrees = dict(G.degree())
     sum_of_edges = sum(degrees.values())
-
     avg_degree = sum_of_edges/len(G)
+
+    # print(max_dct["dist"], max_dct["node"])
 
     # FIXME use distance that is the most distant node
     #     and half the index for next node
@@ -126,36 +127,37 @@ def circ_topo(node_cnt, master="y0"):
 
     # produce_output_image(G)
     # 2.4 works fine with 10 nodes
-    while avg_degree < 2.4:
 
-        eccentricity = nx.eccentricity(G)
+    node_list = list(G)
+    possible_edges = []
+    act_index = max_dct["dist"] / 2
+    # dist = max_dct["dist"]
+    # print(dist / 2)
 
-        # print(eccentricity)
+    while act_index > 1:
+        idx = ceil(act_index)
+        indexes = [i for i in range(idx, ceil(len(node_list)/2), idx)]
 
-        max_eccentricity_node = max(
-            eccentricity.items(), key=operator.itemgetter(1)
-        )[0]
+        for node_pos in indexes:
 
-        next_node = None
+            possible_edges.append(
+                (
+                    node_list[node_pos],
+                    node_list[node_pos + max_dct["dist"]]
+                )
+            )
 
-        for node in eccentricity:
-            if eccentricity[node] >= eccentricity[max_eccentricity_node]:
-                if node != max_eccentricity_node:
-                    if not G.has_edge(node, max_eccentricity_node):
-                        dst = nx.shortest_path(G, node, max_eccentricity_node)
-                        # print(node, max_eccentricity_node)
-                        # print(dst)
-                        if len(dst) >= eccentricity[max_eccentricity_node]:
-                            next_node = node
-                            break
+        # print("RES", possible_edges)
+        act_index = act_index / 2
 
-        if next_node is None:
-            raise Exception("excenricity node pair not found")
+    # to have more simetric result we reverse order of edges
+    possible_edges.reverse()
 
-        G.add_edge(next_node, max_eccentricity_node)
+    while possible_edges and avg_degree < 2.6:
+        next_edge = possible_edges.pop()
+        G.add_edge(*next_edge)
         degrees = dict(G.degree())
         sum_of_edges = sum(degrees.values())
-
         avg_degree = sum_of_edges/len(G)
         # produce_output_image(G)
 
@@ -318,7 +320,7 @@ def load(ctx, input_file, data_format, master, storage):
 )
 @click.option(
     "--nodes", "-n",
-    type=click.IntRange(5, 60),
+    type=click.IntRange(4, 60),
     help="Needed number of topology nodes length <3-60> (server count)."
 )
 @click.option(
@@ -357,7 +359,7 @@ def generate(ctx, storage, branches, length, nodes, master):
     print("Topology has been generated to shelve storage")
 
 
-def produce_output_image(G, filename=None):
+def produce_output_image(G, filename=None, circular=False):
     plt.close()
     art_points = list(nx.articulation_points(G))
 
@@ -368,9 +370,12 @@ def produce_output_image(G, filename=None):
 
     DiG = nx.DiGraph(draw_edges)
     # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
-    pos = nx.spring_layout(
-        G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
-    )
+    if not circular:
+        pos = nx.spring_layout(
+            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+        )
+    else:
+        pos = nx.circular_layout(G)
     # https://stackoverflow.com/questions/50453043/networkx-drawing-label-partially-outside-the-box
     plt.figure(figsize=(11, 7))
     x_values, _y_values = zip(*pos.values())
@@ -858,6 +863,12 @@ def analyze(ctx, storage):
 
     print("----------------------------------------")
     print("General graph information:\n" + str(nx.info(G)))
+    eccentricity = nx.eccentricity(G)
+    print(
+        "Maximum hop count distance from two random replicas:",
+        max(eccentricity.items(), key=operator.itemgetter(1))[1]
+    )
+    print()
     print(
         "Number of connected components:\t" + str(
             nx.number_connected_components(G)
