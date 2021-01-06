@@ -107,6 +107,7 @@ def circ_topo(node_cnt, master="y0"):
         if distance > max_dct["dist"]:
             max_dct["dist"] = distance
             max_dct["node"] = node
+        # print(max_dct["dist"])
 
     G.add_edge(max_dct["node"], master)
 
@@ -128,10 +129,24 @@ def circ_topo(node_cnt, master="y0"):
     # produce_output_image(G)
     # 2.4 works fine with 10 nodes
 
-    node_list = list(G)
+    node_to_back = []
+    node_master = []
+    master_found = False
+    for node in list(G):
+        if node == master:
+            master_found = True
+
+        if master_found:
+            node_master.append(node)
+        else:
+            node_to_back.append(node)
+
+    node_list = node_master + node_to_back
+
     possible_edges = []
     act_index = max_dct["dist"] / 2
     # dist = max_dct["dist"]
+    # print(node_list)
     # print(dist / 2)
 
     while act_index > 1:
@@ -152,7 +167,7 @@ def circ_topo(node_cnt, master="y0"):
 
     # to have more simetric result we reverse order of edges
     possible_edges.reverse()
-
+    # print(possible_edges)
     while possible_edges and avg_degree < 2.6:
         next_edge = possible_edges.pop()
         G.add_edge(*next_edge)
@@ -363,6 +378,13 @@ def generate(ctx, storage, branches, length, nodes, master):
         G = nx.Graph()
         G.add_edges_from(topo["edges"])
 
+    if master not in G:
+        sys.stderr.write(
+            f"Generated topology does not contain {master} master node,"
+            " please specify correct master node using option `--master`\n"
+        )
+        sys.exit(1)
+
     ctx.obj[GRAPH_NX] = G
     ctx.obj[GRAPH_DATA] = None
     ctx.obj[MASTER] = master
@@ -374,7 +396,9 @@ def generate(ctx, storage, branches, length, nodes, master):
     print("Topology has been generated to shelve storage")
 
 
-def produce_backbone_image(G, backbone_edges, levels, circular, filename):
+def produce_backbone_image(
+    G, backbone_edges, levels, circular=False, filename=None
+):
     plt.close()
 
     if not circular:
@@ -461,11 +485,12 @@ def produce_backbone_image(G, backbone_edges, levels, circular, filename):
 
     patches = []
     for level in levels:
+        label = f"Level {level} replica" if level else "FreeIPA master"
         patches.append(
             mlines.Line2D(
                 [0], [0], marker='o', alpha=0.8, markersize=15, color='w',
                 markerfacecolor=fixed_colors[level],
-                label=f"Level {level} nodes",
+                label=label,
                 # https://matplotlib.org/gallery/text_labels_and_annotations/custom_legends.html#sphx-glr-gallery-text-labels-and-annotations-custom-legends-py
             )
         )
@@ -489,6 +514,7 @@ def produce_backbone_image(G, backbone_edges, levels, circular, filename):
     plt.legend(handles=patches)
 
     plt.axis("off")
+    # plt.show()
     plt.savefig(
         os.path.abspath(filename),
         dpi=100
@@ -816,6 +842,10 @@ def print_topology(topology):
     type=str,
     help="ansible-freeipa-custom-repo"
 )
+@click.option(
+    "-c", "--circular", is_flag=True,
+    help="Force the nodes connections shape to form a circle."
+)
 @click.pass_context
 def deployment(
     ctx, jenkins_template, out_dir, storage, node_os,
@@ -823,7 +853,7 @@ def deployment(
     metadata_storage, base_metadata, inventory, ansible_install,
     freeipa_upstream_copr, freeipa_downstream_copr, freeipa_custom_repo,
     ansible_freeipa_upstream_copr, ansible_freeipa_downstream_copr,
-    ansible_freeipa_custom_repo,
+    ansible_freeipa_custom_repo, circular
 ):
     """
     Generate deployment files for the Jenkins automation.
@@ -904,7 +934,7 @@ def deployment(
         G,
         backbone_edges,
         levels,
-        circular=False,
+        circular=circular,
         filename=os.path.join(
             out_dir, "backbone_topology.png"
         )
