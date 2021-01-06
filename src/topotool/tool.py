@@ -374,6 +374,127 @@ def generate(ctx, storage, branches, length, nodes, master):
     print("Topology has been generated to shelve storage")
 
 
+def produce_backbone_image(G, backbone_edges, levels, circular, filename):
+    plt.close()
+
+    if not circular:
+        pos = nx.spring_layout(
+            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
+        )
+    else:
+        pos = nx.circular_layout(G)
+
+    # https://stackoverflow.com/questions/50453043/networkx-drawing-label-partially-outside-the-box
+    plt.figure(figsize=(11, 7))
+    x_values, _y_values = zip(*pos.values())
+    x_max = max(x_values)
+    x_min = min(x_values)
+    x_margin = (x_max - x_min) * 0.2
+    plt.xlim(x_min - x_margin, x_max + x_margin)
+
+    for edge in G.edges:
+        G.remove_edge(*edge)
+        if edge in backbone_edges:
+            G.add_edge(*edge, color="magenta")
+        else:
+            G.add_edge(*edge, color="cyan")
+
+    fixed_colors = [
+        "#66FF00",
+        "#1974D2",
+        "#00CC99",
+        "#E68FAC",
+        "#DFFF00",
+        "#00B7EB",
+        "#D891EF",
+        "#C32148",
+        "#58427C",
+        "#FFD300",
+        "#F56FA1",
+        "#666699",
+        "#D4AF37",
+        "#6F00FF",
+        "#BF00FF",
+        "#CCFF00",
+        "#85754E",
+        "#B2EC5D",
+        "#ED2939",
+        "#4C516D",
+        "#FFD700",
+    ]
+
+    draw_edges = list(G.edges)
+
+    for edge in G.edges:
+        draw_edges.append((edge[1], edge[0]))
+
+    DiG = nx.DiGraph(draw_edges)
+
+    for level in levels:
+        new_node_color = fixed_colors[level]
+        nx.draw_networkx_nodes(
+            G, pos,
+            nodelist=levels[level],
+            node_color=new_node_color,
+            node_size=700,
+            alpha=0.85
+        )
+
+    colors = [G[u][v]["color"] for u, v in DiG.edges()]
+
+    nx.draw_networkx_edges(
+        DiG, pos,
+        edge_color=colors,
+        edgelist=DiG.edges,
+        width=3.0,
+        arrows=True,
+        arrowstyle="-|>",
+        arrowsize=20
+    )  # this HAX (DiGraph) is needed for arrows to be in drawings
+
+    labels = {}
+
+    for node in G:
+        labels[node] = node
+
+    nx.draw_networkx_labels(G, pos, labels)
+
+    patches = []
+    for level in levels:
+        patches.append(
+            mlines.Line2D(
+                [0], [0], marker='o', alpha=0.8, markersize=15, color='w',
+                markerfacecolor=fixed_colors[level],
+                label=f"Level {level} nodes",
+                # https://matplotlib.org/gallery/text_labels_and_annotations/custom_legends.html#sphx-glr-gallery-text-labels-and-annotations-custom-legends-py
+            )
+        )
+
+    patches.append(
+        mlines.Line2D(
+            [0], [0], linewidth=4.0, alpha=0.8, color="magenta",
+            label="Backbone replication agreement",
+        )
+    )
+
+    patches.append(
+        mlines.Line2D(
+            [0], [0], linewidth=4.0, alpha=0.8, color="cyan",
+            label="Additional replication agreement",
+        )
+    )
+
+    plt.legend(handles=patches)
+
+    plt.legend(handles=patches)
+
+    plt.axis("off")
+    plt.savefig(
+        os.path.abspath(filename),
+        dpi=100
+    )
+
+
 def produce_output_image(G, filename=None, circular=False):
     plt.close()
     art_points = list(nx.articulation_points(G))
@@ -779,7 +900,15 @@ def deployment(
     save_data(output_jenkins_job, jenkinsfile)
 
     print_topology(levels)  # to the terminal
-    # produce_backbone_image(G, backbone_edges, predecessors)
+    produce_backbone_image(
+        G,
+        backbone_edges,
+        levels,
+        circular=False,
+        filename=os.path.join(
+            out_dir, "backbone_topology.png"
+        )
+    )
     # merge dictionary items to one list containing all nodes
     topo_nodes = list(chain(*[levels[level] for level in levels]))
 
