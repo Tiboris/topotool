@@ -48,6 +48,7 @@
     ipatopology_segments:
 {%-    for redundant in redundant_agreements %}
     - {suffix: domain, left: {{replica}}.ipadomain.test, right: {{ redundant }}.ipadomain.test}
+    - {suffix: domain, right: {{replica}}.ipadomain.test, left: {{ redundant }}.ipadomain.test}
 {%     endfor %}
 
 {%-  raw %}
