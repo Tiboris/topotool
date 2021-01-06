@@ -240,10 +240,17 @@ def predecessors_from_first_levels(levels):
 
 @graphcli.command()
 @click.argument("input_file")
-@click.option("-m", "--master", default="y0")
-@click.option("-s", "--storage", default="./.graph_storage.db")
+@click.option(
+    "-m", "--master", default="y0",
+    help="Specify a master node.", show_default=True
+)
+@click.option(
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Change a location for db file.", show_default=True
+)
 @click.option(
     "-t", "--type", "data_format", default="ipa",
+    help="Swith between input file formats.", show_default=True,
     type=click.Choice(["ipa", "edges"]),
 )
 @click.pass_context
@@ -307,29 +314,37 @@ def load(ctx, input_file, data_format, master, storage):
 
 
 @graphcli.command()
-@click.option("-s", "--storage", default="./.graph_storage.db")
+@click.option(
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Change a location for db file.", show_default=True
+)
 @click.option(
     "--branches", "-x",
     type=click.IntRange(3, 20),
-    help="Number of topology branches <3-20> to be generated (x-axis)."
+    help="Topology branches <3-20> (x-axis) ignored when option '--nodes' is used."
 )
 @click.option(
     "--length", "-y",
     type=click.IntRange(3, 20),
-    help="Set topology length <3-20> to be generated (y-axis)."
+    help="Topology length <3-20> (y-axis) ignored when option '--nodes' is used."
 )
 @click.option(
     "--nodes", "-n",
     type=click.IntRange(4, 60),
-    help="Needed number of topology nodes length <3-60> (server count)."
+    help="Needed number of topology nodes <3-60> (server count)."
 )
 @click.option(
     "--master", "-m", default="y0",
-    help="Master node name."
+    help="Master node name.", show_default=True
 )
 @click.pass_context
 def generate(ctx, storage, branches, length, nodes, master):
-    """Generate a topology graph based on options."""
+    """
+    Generate a topology graph based on options.
+
+    --nodes and pair --branches --length triggerr generation of the
+    different type topologies (for more information see documnetation).
+    """
     topo = {}
     if nodes:
         if branches or length:
@@ -478,11 +493,24 @@ def produce_output_image(G, filename=None, circular=False):
 
 
 @graphcli.command()
-@click.option("-s", "--storage", default="./.graph_storage.db")
-@click.option("-i", "--interactive", is_flag=True)
-@click.option("-f", "--filename")
+@click.option(
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Change a location for db file.", show_default=True
+)
+@click.option(
+    "-i", "--interactive", is_flag=True,
+    help="Open a mathplotlib window with the topology graph."
+)
+@click.option(
+    "-c", "--circular", is_flag=True,
+    help="Force the nodes connections shape to form a circle."
+)
+@click.option(
+    "-f", "--filename",
+    help="Change path of saving the file. [default: ./topology_drawing.png]"
+)
 @click.pass_context
-def draw(ctx, storage, interactive, filename):
+def draw(ctx, storage, interactive, filename, circular):
     """Create a topology graph picture."""
     ctx = load_context(ctx, storage)
 
@@ -493,14 +521,16 @@ def draw(ctx, storage, interactive, filename):
         sys.exit(1)
 
     if interactive:
-        produce_output_image(G)
+        produce_output_image(G, circular=circular)
 
     if not interactive and not filename:
-        produce_output_image(G, filename="topology_drawing.png")
+        produce_output_image(
+            G, filename="topology_drawing.png", circular=circular
+        )
         print("Image stored to file topology_drawing.png")
 
     if filename:
-        produce_output_image(G, filename=filename)
+        produce_output_image(G, filename=filename, circular=circular)
         print(f"Image stored to file {filename}")
 
 
@@ -543,8 +573,11 @@ def print_topology(topology):
 
 
 @graphcli.command()
-@click.option("-d", "--out-dir", default="./FILES")
-@click.option("-s", "--storage", default="./.graph_storage.db")
+@click.option("-d", "--out-dir", default="./DEPLOYMENT_FILES")
+@click.option(
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Change a location for db file.", show_default=True
+)
 @click.option(
     "-j", "--jenkins-template", type=click.Path(exists=True),
     default=os.path.join(
@@ -745,7 +778,8 @@ def deployment(
     )
     save_data(output_jenkins_job, jenkinsfile)
 
-    print_topology(levels)
+    print_topology(levels)  # to the terminal
+    # produce_backbone_image(G, backbone_edges, predecessors)
     # merge dictionary items to one list containing all nodes
     topo_nodes = list(chain(*[levels[level] for level in levels]))
 
@@ -846,7 +880,10 @@ def sort_by_degree(G, nodes=None, reverse=False):
 
 
 @graphcli.command()
-@click.option("-s", "--storage", default="./.graph_storage.db")
+@click.option(
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Change a location for db file.", show_default=True
+)
 @click.pass_context
 def analyze(ctx, storage):
     """
@@ -930,7 +967,7 @@ def analyze(ctx, storage):
     print("----------------------------------------")
 
 
-def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
+def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
     # trying to remove articulation points
     added_edges = []
@@ -998,7 +1035,7 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
                 color = "green" if len(candidates) > 2 else color
             else:
                 added = False
-                if omit_max_degree:
+                if omit_max:
                     candidates.append(to_add)
                     color = "#0277bd"  # blue edge color
                     added = True
@@ -1055,7 +1092,7 @@ def remove_articulation_points(G, step, omit_max_degree, max_repl_agreements):
 
 
 def remove_overloaded_nodes_edges(
-    G, step, add_while_removing, omit_max_degree, max_repl_agreements
+    G, step, add_while_removing, omit_max, max_repl_agreements
 ):
     removed = []
     can_not_remove = []
@@ -1138,7 +1175,7 @@ def remove_overloaded_nodes_edges(
                 )
                 G, added, step = remove_articulation_points(
                     G, step=step,
-                    omit_max_degree=omit_max_degree,
+                    omit_max=omit_max,
                     max_repl_agreements=max_repl_agreements,
                 )
                 added_edges += added
@@ -1170,17 +1207,29 @@ def remove_overloaded_nodes_edges(
 
 @graphcli.command()
 @click.option(
-    "-h", "--max", "max_repl_agreements",
+    "-m", "--max", "max_repl_agreements",
     default=MAX_REPL_AGREEMENTS, type=click.IntRange(2, 10),
+    help="Change maximum number <2-10> of replication agreemnts per replica."
 )
-@click.option("--omit-max-degree", is_flag=True, default=False)
-@click.option("--add-while-removing", is_flag=True, default=False)
-@click.option("-s", "--storage", default="./.graph_storage.db")
+@click.option(
+    "--omit-max", is_flag=True, default=False,
+    help="Do not check the maximum number of the replication agreements"
+    " while adding a new replication agreement to connect a topology."
+)
+@click.option(
+    "--add-while-removing", is_flag=True, default=False,
+    help="When removal of the replication agreement creates a articulation "
+    "point add edge to fix the issue."
+)
+@click.option(
+    "-s", "--storage", default="./.graph_storage.db",
+    help="Change a location for db file.", show_default=True
+)
 @click.pass_context
 def fixup(ctx, storage, max_repl_agreements,
-          omit_max_degree, add_while_removing):
+          omit_max, add_while_removing):
     """
-    Generate an Ansible automation to remove topology (weak spots.
+    Generate an Ansible automation to remove topology weak spots.
     """
     ctx = load_context(ctx, storage)
 
@@ -1192,18 +1241,18 @@ def fixup(ctx, storage, max_repl_agreements,
 
     print("========================================")
     step = 0
-    produce_output_image(G, f"fixup_step_{step}_starting_with.png")
+    produce_output_image(G, f"fixup_step_{step}_start.png")
 
     G, added_edges, step = remove_articulation_points(
         G, step=step,
-        omit_max_degree=omit_max_degree,
+        omit_max=omit_max,
         max_repl_agreements=max_repl_agreements,
     )
 
     G, removed, added_with_removal, step = remove_overloaded_nodes_edges(
         G, step=step,
         add_while_removing=add_while_removing,
-        omit_max_degree=omit_max_degree,
+        omit_max=omit_max,
         max_repl_agreements=max_repl_agreements,
     )
 
