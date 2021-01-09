@@ -52,8 +52,8 @@ def load_context(ctx, storage):
 
 def save_data(path, data):
     """
-    Writes data with file.write() to file specified by path.
-    if path is not specified use stdout.
+    Writes data with file.write() to file specified by path
+    if path is not specified use stdout
     """
     with open(path, "w") as data_file:
         data_file.write(data)
@@ -361,10 +361,10 @@ def load(ctx, input_file, data_format, master, storage):
 @click.pass_context
 def generate(ctx, storage, branches, length, nodes, master):
     """
-    Generate a topology graph based on options.
+    Generate one of two topology graphs based on given options
 
     --nodes and pair --branches --length trigger generation of the
-    different type topologies (for more information see documentation).
+    different type topologies (for more information see the documentation)
     """
     topo = {}
     if nodes:
@@ -878,7 +878,7 @@ def deployment(
     circular,
 ):
     """
-    Generate deployment files for the Jenkins automation.
+    Generate deployment files for the Jenkins automation
     """
     ctx = load_context(ctx, storage)
 
@@ -1066,7 +1066,7 @@ def sort_by_degree(G, nodes=None, reverse=False):
 @click.pass_context
 def analyze(ctx, storage):
     """
-    Print information about loaded topology graph.
+    Print information about processed topology graph
     """
     ctx = load_context(ctx, storage)
 
@@ -1399,12 +1399,12 @@ def remove_overloaded_nodes_edges(
     "--no-fqdn",
     is_flag=True,
     help="Change a templates from fqdn to non-fqdn",
-    show_default=True,
+    default=False,
 )
 @click.pass_context
 def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing, no_fqdn):
     """
-    Generate an Ansible automation to remove topology weak spots.
+    Generate an Ansible automation to remove topology weak spots
     """
     ctx = load_context(ctx, storage)
 
