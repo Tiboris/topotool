@@ -530,8 +530,6 @@ def produce_backbone_image(G, backbone_edges, levels, circular=False, filename=N
 
     plt.legend(handles=patches)
 
-    plt.legend(handles=patches)
-
     plt.axis("off")
     # plt.show()
     plt.savefig(os.path.abspath(filename), dpi=100)
@@ -642,6 +640,17 @@ def produce_output_image(G, filename=None, circular=False):
             alpha=0.8,
             color="#90ee90",
             label="Added replication agreement",
+        )
+    )
+
+    patches.append(
+        mlines.Line2D(
+            [0],
+            [0],
+            linewidth=4.0,
+            alpha=0.8,
+            color="#0277bd",
+            label="Forced replication agreement",
         )
     )
 
@@ -1149,6 +1158,29 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
     can_not_add = []
     to_add = ""
 
+    color = "#90ee90"  # default light green added edge color
+
+    one_repl_agreement_replicas = []
+    # we build list of candidates from 1 repl agreement nodes and connect them
+    for node in G:
+        if nx.degree(G, node) == 1:
+            one_repl_agreement_replicas.append(node)
+
+    # while there is more than 2 replicas to connect we connect them
+    while len(one_repl_agreement_replicas) >= 2:
+        left = one_repl_agreement_replicas.pop()
+        right = one_repl_agreement_replicas.pop()
+        edge_to_add = (left, right)
+        step += 1
+        G.add_edges_from([edge_to_add], color=color)
+        produce_output_image(G, f"fixup_step_{step}_add_{left}_{right}.png")
+        # produce_output_image(G)
+        added_edges.append(edge_to_add)
+        print("Adding replication agreement:", edge_to_add)
+
+    # a case that only one replica has one repl agreement may occur after first fixup
+    # however we will fix that with following algorithm
+
     all_components = list(nx.biconnected_components(G))
 
     while list(nx.articulation_points(G)):
@@ -1161,21 +1193,19 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
         # pick articulation point to solve issue for FIXME
         art_point = art_points.pop()
-
         color = "#90ee90"  # default light green added edge color
 
-        # we build list of candidates
+        connected_by_art_point = []
+        remaining_components = []
+        for comp in all_components:
+            if art_point in comp:
+                connected_by_art_point.append(comp)
+            else:
+                remaining_components.append(comp)
+
         candidates = []
-
-        while len(candidates) != 2:
-            if not all_components:
-                break
-
-            try:
-                comp = all_components.pop()
-            except IndexError:
-                sys.stderr.write("No more topology components left to try connecting\n")
-                sys.exit(2)
+        for comp in connected_by_art_point:
+            sorted_nodes = sort_by_degree(G, nodes=comp, reverse=False)
 
             # get dictionary with keys corresponding to degrees and each key
             # will have a list of node with following degree as value
@@ -1191,12 +1221,26 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
             start = 0
             to_add = None
-            while not to_add and (  # and to_add not in art_points
-                start < len(to_pick_from)
-            ):
+            while not to_add and (start < len(to_pick_from)):
                 to_add = to_pick_from[start]
-                # print(to_add, to_pick_from)
                 start += 1
+
+            # if the node is articulation point so it connets other biconnected
+            # components we choose to connect lowest of the remaining nodes
+
+            if to_add in art_points:
+                remaining_nodes = list(tuple(chain(*(remaining_components))))
+                # print(remaining_nodes)
+                sorted_remaining = sort_by_degree(
+                    G, nodes=remaining_nodes, reverse=False
+                )
+                new_pick = []
+                for _degree, nodes in sorted_remaining.items():
+                    new_pick += nodes
+
+                for pick in new_pick:
+                    if pick not in art_points:
+                        to_add = pick
 
             min_degree = nx.degree(G, to_add)
 
@@ -1237,24 +1281,18 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
                     sys.stderr.write(f"{to_add} has neighbor: {nei}\n")
                 sys.exit(3)
 
-        if len(candidates) == 2:
+        if len(candidates) >= 2:
             left = candidates[-2]
             right = candidates[-1]
             edge_to_add = (left, right)
             step += 1
             G.add_edges_from([edge_to_add], color=color)
             produce_output_image(G, f"fixup_step_{step}_add_{left}_{right}.png")
+            # produce_output_image(G)
             added_edges.append(edge_to_add)
+            print("Adding replication agreement:", edge_to_add)
 
         all_components = list(nx.biconnected_components(G))
-
-    print("----------------------------------------")
-    print("Added replication agreement(s):")
-    for edge in added_edges:
-        print(edge)
-
-    print(f"Added replication agreement(s) count: {len(added_edges)}")
-    print("----------------------------------------")
 
     return G, added_edges, step
 
@@ -1324,6 +1362,7 @@ def remove_overloaded_nodes_edges(
         max_degree = max(sorted_nodes, key=int)
 
         removed.append(remove)
+        print("Removing replication agreement:", remove)
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we continue removing
@@ -1353,7 +1392,7 @@ def remove_overloaded_nodes_edges(
 
             else:
                 sys.stdout.write(
-                    f"Info: Adding replication agreement {removed[-1]} back\n"
+                    f"Info: Adding back replication agreement: {removed[-1]} \n"
                 )
                 G.add_edge(removed[-1][0], removed[-1][1])
                 can_not_remove.append(removed[-1])
@@ -1435,13 +1474,6 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing, no_fq
     missing_segments = get_segments(added_edges)
     redundant_segments = get_segments(removed)
 
-    print("----------------------------------------")
-    print("Removed replication agreement(s):")
-    for edge in removed:
-        print(edge)
-
-    print(f"Removed replication agreement(s) count: {len(removed)}")
-    print("----------------------------------------")
     print("Summary:")
 
     if missing_segments or redundant_segments:
