@@ -546,6 +546,7 @@ def produce_output_image(G, filename=None, circular=False):
     for edge in G.edges:
         draw_edges.append((edge[1], edge[0]))
 
+    # this HAX (DiGraph) is needed for arrows to be in drawings
     DiG = nx.DiGraph(draw_edges)
     # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
     if not circular:
@@ -575,7 +576,7 @@ def produce_output_image(G, filename=None, circular=False):
         elif node in art_points:
             plot_nodes["Articulation point"]["nodes"].append(node)
         elif node_degree > 4:
-            plot_nodes["Overloaded"]["nodes"].append(node)
+            plot_nodes["Overloaded replica"]["nodes"].append(node)
         elif node_degree == 1 and not len(G) == 2:
             plot_nodes["One replication agreement"]["nodes"].append(node)
         else:
@@ -608,7 +609,7 @@ def produce_output_image(G, filename=None, circular=False):
         arrows=True,
         arrowstyle="-|>",
         arrowsize=20,
-    )  # this HAX (DiGraph) is needed for arrows to be in drawings
+    )
 
     labels = {}
 
@@ -679,10 +680,7 @@ def produce_output_image(G, filename=None, circular=False):
     help="Open a mathplotlib window with the topology graph",
 )
 @click.option(
-    "-c",
-    "--circular",
-    is_flag=True,
-    help="Force the nodes figure to circle shape",
+    "-c", "--circular", is_flag=True, help="Force the nodes figure to circle shape",
 )
 @click.option(
     "-f",
@@ -851,10 +849,7 @@ def print_topology(topology):
     "--ansible-freeipa-custom-repo", type=str, help="ansible-freeipa-custom-repo"
 )
 @click.option(
-    "-c",
-    "--circular",
-    is_flag=True,
-    help="Force the nodes figure to circle shape",
+    "-c", "--circular", is_flag=True, help="Force the nodes figure to circle shape",
 )
 @click.pass_context
 def deployment(
@@ -1108,8 +1103,7 @@ def analyze(ctx, storage):
             )
 
     if issues and not len(G) == 2:
-        print("ISSUE\t\t\t\t| REPLICA")
-        print("-----\t\t\t\t| ----")
+        print("ISSUE\t\t\t\t| REPLICA\n-----\t\t\t\t| ----")
         for issue in issues:
             print(issue)
 
@@ -1401,8 +1395,14 @@ def remove_overloaded_nodes_edges(
     help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
+@click.option(
+    "--no-fqdn",
+    is_flag=True,
+    help="Change a templates from fqdn to non-fqdn",
+    show_default=True,
+)
 @click.pass_context
-def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
+def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing, no_fqdn):
     """
     Generate an Ansible automation to remove topology weak spots.
     """
@@ -1415,6 +1415,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
         sys.exit(1)
 
     print("========================================")
+
     step = 0
     produce_output_image(G, f"fixup_step_{step}_start.png")
 
@@ -1431,7 +1432,6 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
     )
 
     added_edges += added_with_removal
-
     missing_segments = get_segments(added_edges)
     redundant_segments = get_segments(removed)
 
@@ -1442,33 +1442,26 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
 
     print(f"Removed replication agreement(s) count: {len(removed)}")
     print("----------------------------------------")
-
     print("Summary:")
 
     if missing_segments or redundant_segments:
         print(f"Added replication agreement(s) [{len(added_edges)}]:")
         for edge in added_edges:
             print(edge)
+
         print(f"Removed replication agreement(s) [{len(removed)}]:")
         for edge in removed:
             print(edge)
 
-        # intersection should be empty in perfect case
         print(
             "Replication agreement intersection:",
             set(added_edges).intersection(set(removed)),
         )
-
         print("----------------------------------------")
-
         print("Saving result graph image")
-
         produce_output_image(G, "fixup_result.png")
-
         print("----------------------------------------")
-
         print("Saving result graph data")
-
         # save new graph to context db
         ctx.obj[GRAPH_NX] = G
         with shelve.open(storage) as db:
@@ -1477,18 +1470,25 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
 
         print("----------------------------------------")
         print("Generating fixup playbook")
-
+        fqdn = "_fqdn" if not no_fqdn else ""
         fixup_playbook = load_jinja_template(
-            os.path.join(SCALING_DEFAULTS, "fixup_topology_segments.j2")
+            os.path.join(SCALING_DEFAULTS, f"fixup_topology_segments{fqdn}.j2")
         )
-
-        # Generate fixup playbook
         fixup = "fixup_result.yml"
         fixup_data = fixup_playbook.render(
             missing=missing_segments, redundant=redundant_segments,
         )
-
         save_data(fixup, fixup_data)
+
+        print("Generating fixup inventory")
+        fixup_inv = load_jinja_template(
+            os.path.join(SCALING_DEFAULTS, f"fixup_inventory{fqdn}.j2")
+        )
+        inv = "fixup_result.inv"
+        inv_data = fixup_inv.render(
+            ipa_replicas=set(tuple(chain(*(removed + added_edges))))
+        )
+        save_data(inv, inv_data)
     else:
         print("Nothing to do")
 

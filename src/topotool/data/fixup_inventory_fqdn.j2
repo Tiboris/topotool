@@ -1,0 +1,19 @@
+[ipareplicas]
+{%-  for replica in ipa_replicas %}
+{{ replica }}
+{%-   endfor %}
+
+[ipacluster:children]
+ipareplicas
+
+[ipacluster:vars]
+ipaadmin_password=ADMPassword123
+ipadm_password=DMPassword123
+ipaserver_domain=ipadomain.test
+ipaserver_realm=IPADOMAIN.TEST
+
+[ipaserver:vars]
+ipaserver_setup_dns=yes
+ipaserver_auto_forwarders=yes
+ipaserver_auto_reverse=yes
+

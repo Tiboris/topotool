@@ -1,0 +1,69 @@
+---
+{#- add missing topology Segments #}
+{%-  for replica, missing_agreements in missing.items() %}
+
+- name: Add Missing Topology Segments for {{ replica }}
+  hosts: {{ replica }}
+  become: true
+
+  roles:
+  - role: ipareplica
+    state: present
+
+  vars:
+    ipatopology_segments:
+{%-    for missing in missing_agreements %}
+    - {suffix: domain, left: {{replica}}, right: {{ missing }}}
+{%     endfor %}
+
+{%-  raw %}
+
+  tasks:
+  - name: Add topology segment
+    ipatopologysegment:
+      ipaadmin_password: "{{ ipaadmin_password }}"
+      suffix: "{{ item.suffix }}"
+      name: "{{ item.name | default(omit) }}"
+      left: "{{ item.left }}"
+      right: "{{ item.right }}"
+      state: present
+    loop: "{{ ipatopology_segments | default([]) }}"
+{%-  endraw %}
+
+{%-  endfor %}
+
+{#- remove redundant topology Segments #}
+
+{%-  for replica, redundant_agreements in redundant.items() %}
+
+- name: Remove Topology Segments for {{ replica }}
+  hosts: {{ replica }}
+  become: true
+
+  roles:
+  - role: ipareplica
+    state: present
+
+  vars:
+    ipatopology_segments:
+{%-    for redundant in redundant_agreements %}
+    - {suffix: domain, left: {{replica}}, right: {{ redundant }}}
+    - {suffix: domain, right: {{replica}}, left: {{ redundant }}}
+{%     endfor %}
+
+{%-  raw %}
+
+  tasks:
+  - name: Remove topology segment
+    ipatopologysegment:
+      ipaadmin_password: "{{ ipaadmin_password }}"
+      suffix: "{{ item.suffix }}"
+      name: "{{ item.name | default(omit) }}"
+      left: "{{ item.left }}"
+      right: "{{ item.right }}"
+      state: absent
+    loop: "{{ ipatopology_segments | default([]) }}"
+{%-  endraw %}
+
+{%-  endfor %}
+
