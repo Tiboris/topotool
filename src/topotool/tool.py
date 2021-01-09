@@ -84,7 +84,7 @@ def gen_metadata(topo_nodes, node_os, destination,
     save_data(output_file, metadata)
 
 
-def circ_topo(node_cnt, master="y0"):
+def circle_topology(node_cnt, master="y0"):
     """Experimental approach we need to half the topology"""
     nodes = []
     for i in range(node_cnt):
@@ -124,7 +124,6 @@ def circ_topo(node_cnt, master="y0"):
     # we take 5/2 which is 2.5
     # we round it,
     # connect 3 with 3+max dst
-    # repeat while newindex > 2 or while avg degree is smth
 
     # produce_output_image(G)
     # 2.4 works fine with 10 nodes
@@ -165,7 +164,7 @@ def circ_topo(node_cnt, master="y0"):
         # print("RES", possible_edges)
         act_index = act_index / 2
 
-    # to have more simetric result we reverse order of edges
+    # to have more symmetric result we reverse order of edges
     possible_edges.reverse()
     # print(possible_edges)
     while possible_edges and avg_degree < 2.6:
@@ -265,12 +264,12 @@ def predecessors_from_first_levels(levels):
 )
 @click.option(
     "-t", "--type", "data_format", default="ipa",
-    help="Swith between input file formats.", show_default=True,
+    help="Switch between input file formats.", show_default=True,
     type=click.Choice(["ipa", "edges"]),
 )
 @click.pass_context
 def load(ctx, input_file, data_format, master, storage):
-    """Loads grap data to context dictionary"""
+    """Loads graph data to context dictionary"""
     ctx.ensure_object(dict)
 
     with open(input_file, "r") as f:
@@ -357,8 +356,8 @@ def generate(ctx, storage, branches, length, nodes, master):
     """
     Generate a topology graph based on options.
 
-    --nodes and pair --branches --length triggerr generation of the
-    different type topologies (for more information see documnetation).
+    --nodes and pair --branches --length trigger generation of the
+    different type topologies (for more information see documentation).
     """
     topo = {}
     if nodes:
@@ -367,7 +366,7 @@ def generate(ctx, storage, branches, length, nodes, master):
                 "Info: option --nodes has been passed, ignoring options "
                 "--branches and --length"
             )
-        G = circ_topo(nodes, master)
+        G = circle_topology(nodes, master)
     else:
         if not branches:
             branches = 3
@@ -399,6 +398,8 @@ def generate(ctx, storage, branches, length, nodes, master):
 def produce_backbone_image(
     G, backbone_edges, levels, circular=False, filename=None
 ):
+    G = deepcopy(G)
+
     plt.close()
 
     if not circular:
@@ -547,40 +548,40 @@ def produce_output_image(G, filename=None, circular=False):
     plt.xlim(x_min - x_margin, x_max + x_margin)
 
     plot_nodes = {
-        "overloaded_art_points": {
+        "Complying replicas": {
             "nodes": [],
-            "color": "orange",
+            "color": "green",
         },
-        "art_points": {
-            "nodes": [],
-            "color": "yellow",
-        },
-        "overloaded": {
-            "nodes": [],
-            "color": "red",
-        },
-        "one_edge": {
+        "One replication agreement": {
             "nodes": [],
             "color": "pink",
         },
-        "complying_nodes": {
+        "Articulation point": {
             "nodes": [],
-            "color": "green",
+            "color": "yellow",
+        },
+        "Overloaded replica": {
+            "nodes": [],
+            "color": "red",
+        },
+        "Overloaded articulation point": {
+            "nodes": [],
+            "color": "orange",
         },
     }
 
     for node in G:
         node_degree = nx.degree(G, node)
         if node in art_points and node_degree > 4:
-            plot_nodes["overloaded_art_points"]["nodes"].append(node)
+            plot_nodes["Overloaded articulation point"]["nodes"].append(node)
         elif node in art_points:
-            plot_nodes["art_points"]["nodes"].append(node)
+            plot_nodes["Articulation point"]["nodes"].append(node)
         elif node_degree > 4:
-            plot_nodes["overloaded"]["nodes"].append(node)
+            plot_nodes["Overloaded"]["nodes"].append(node)
         elif node_degree == 1 and not len(G) == 2:
-            plot_nodes["one_edge"]["nodes"].append(node)
+            plot_nodes["One replication agreement"]["nodes"].append(node)
         else:
-            plot_nodes["complying_nodes"]["nodes"].append(node)
+            plot_nodes["Complying replicas"]["nodes"].append(node)
 
     for node_type in plot_nodes:
         nx.draw_networkx_nodes(
@@ -626,6 +627,20 @@ def produce_output_image(G, filename=None, circular=False):
                 # https://matplotlib.org/gallery/text_labels_and_annotations/custom_legends.html#sphx-glr-gallery-text-labels-and-annotations-custom-legends-py
             )
         )
+
+    patches.append(
+        mlines.Line2D(
+            [0], [0], linewidth=4.0, alpha=0.8, color="#90ee90",
+            label="Added replication agreement",
+        )
+    )
+
+    patches.append(
+        mlines.Line2D(
+            [0], [0], linewidth=4.0, alpha=0.8, color="#ff7f0e",
+            label="Original replication agreement",
+        )
+    )
 
     plt.legend(handles=patches)
 
@@ -708,7 +723,7 @@ def get_segments(edges):
 
 
 def print_topology(topology):
-    # in general the topology's second level (y1x*) should be there always
+    # in general the topology second level (y1x*) should be there always
     topo_width = len(topology[1])
     for level in topology:
         if len(topology[level]) == 1:
@@ -880,13 +895,9 @@ def deployment(
         if s in levels[-1]:
             # print(s, f)
             new = new + f
-            # print("+")
         else:
             # print(s, f)
-            # print("next", f, "level:", new)
-            # print("before", levels)
             levels.append(new)
-            # print("afeter", levels)
             new = f
         for pred in f:
             predecessors[pred] = s
@@ -943,7 +954,7 @@ def deployment(
     topo_nodes = list(chain(*[levels[level] for level in levels]))
 
     print("Generate metadata for topology nodes")
-    # Load jinja teplate
+    # Load jinja template
     metadata_template = load_jinja_template(base_metadata)
 
     # Generate the metadata file for all nodes inside of FILES directory
@@ -953,21 +964,21 @@ def deployment(
                  tool_repo, tool_branch)
 
     print("Generate ansible-freeipa inventory file")
-    # Load jinja teplate
+    # Load jinja template
     job_inventory = load_jinja_template(inventory)
 
     # Generate ansible-freeipa inventory file
-    outpujob_inventory = os.path.join(out_dir, "perf-inventory")
+    outpu_job_inventory = os.path.join(out_dir, "perf-inventory")
     inventoryfile = job_inventory.render(master_server=topo_nodes[0],
                                          levels=levels,
                                          predecessors=predecessors)
-    save_data(outpujob_inventory, inventoryfile)
+    save_data(outpu_job_inventory, inventoryfile)
 
     print("Generate ansible-freeipa install file")
     missing_edges = set(G.edges) - set(backbone_edges)
 
     segments = get_segments(missing_edges)
-    # Load jinja teplate
+    # Load jinja template
     ansible_install = load_jinja_template(ansible_install)
     # Generate ansible-freeipa install file
     output_install = os.path.join(out_dir, "perf-install.yml")
@@ -981,7 +992,7 @@ def deployment(
 
 
 def compatible_backbone_edges(G, master):
-    """Rerurn edges not based on direction of bfs walk"""
+    """Return edges not based on direction of bfs walk"""
     all_edges = set(G.edges)
     b_edges = set(nx.bfs_edges(G, master))
 
@@ -1099,9 +1110,9 @@ def analyze(ctx, storage):
     print("--------------------")
     print("Looking for articulation points...")
     print(
-            "Note: Optimal FreeIPA replication topology should "
-            "not contain any articulation point"
-        )
+        "Note: Optimal FreeIPA replication topology should "
+        "not contain any articulation point"
+    )
 
     art_points = sorted(list(nx.articulation_points(G)), reverse=True)
     components = list(nx.biconnected_components(G))
@@ -1191,7 +1202,7 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
             if min_degree < max_repl_agreements:
                 candidates.append(to_add)
-                color = "green" if len(candidates) > 2 else color
+                color = "#90ee90" if len(candidates) > 2 else color
             else:
                 added = False
                 if omit_max:
@@ -1223,7 +1234,7 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
                     f"Unable to add more replication agreements to: {to_add}\n"
                 )
                 for nei in neighs:
-                    sys.stderr.write(f"{to_add} has neihgbor: {nei}\n")
+                    sys.stderr.write(f"{to_add} has neighbor: {nei}\n")
                 sys.exit(3)
 
         if len(candidates) == 2:
@@ -1297,7 +1308,7 @@ def remove_overloaded_nodes_edges(
             )
             sys.stderr.write(
                 "Try to use option '--add-while-removing' to remove "
-                "articulation poins created by this removal\n"
+                "articulation points created by this removal\n"
             )
             sys.exit(4)
 
@@ -1368,7 +1379,7 @@ def remove_overloaded_nodes_edges(
 @click.option(
     "-m", "--max", "max_repl_agreements",
     default=MAX_REPL_AGREEMENTS, type=click.IntRange(2, 10),
-    help="Change maximum number <2-10> of replication agreemnts per replica."
+    help="Change maximum number <2-10> of replication agreements per replica."
 )
 @click.option(
     "--omit-max", is_flag=True, default=False,
