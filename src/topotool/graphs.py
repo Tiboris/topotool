@@ -57,8 +57,7 @@ class Edge:
 
 class Graph:
     def __init__(
-        self, data, Instance=Vertex,
-        weight_delim="", data_format="ipa",
+        self, data, Instance=Vertex, weight_delim="", data_format="ipa",
     ):
         self.Instance = Instance
         self.oriented = False
@@ -72,9 +71,7 @@ class Graph:
             self._parse_vertices(data, delimiter=",")
             self._parse_edge_connections(data, delim, weight_delim)
         else:
-            raise NotImplementedError(
-                "Unknown format of the data in file selected."
-            )
+            raise NotImplementedError("Unknown format of the data in file selected.")
 
         self.delimiter = delim
 
@@ -170,8 +167,7 @@ class Graph:
             raise Error("Did not find any segments")
         if segments_cnt != expected_seg_cnt:
             raise Error(
-                f"Expected {expected_seg_cnt} segments "
-                f"but {segments_cnt} parsed"
+                f"Expected {expected_seg_cnt} segments " f"but {segments_cnt} parsed"
             )
 
         self._edges = edges
@@ -189,8 +185,7 @@ class Graph:
                 self.oriented = ">" in delimiter
 
                 edges[connection] = Edge(
-                    self.vertices[a], self.vertices[b],
-                    weight, oriented=self.oriented,
+                    self.vertices[a], self.vertices[b], weight, oriented=self.oriented,
                 )
 
                 self.vertices[a].connect(b)

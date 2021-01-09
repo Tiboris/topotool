@@ -34,10 +34,7 @@ DB_KEYS = [
     MASTER,
 ]
 
-SCALING_DEFAULTS = os.path.join(
-    os.path.dirname(__file__),
-    "./data/"
-)
+SCALING_DEFAULTS = os.path.join(os.path.dirname(__file__), "./data/")
 
 
 def load_context(ctx, storage):
@@ -58,7 +55,7 @@ def save_data(path, data):
     Writes data with file.write() to file specified by path.
     if path is not specified use stdout.
     """
-    with open(path, 'w') as data_file:
+    with open(path, "w") as data_file:
         data_file.write(data)
 
 
@@ -68,9 +65,17 @@ def load_jinja_template(path):
     return template
 
 
-def gen_metadata(topo_nodes, node_os, destination,
-                 project, run, job, template,
-                 tool_repo, tool_branch):
+def gen_metadata(
+    topo_nodes,
+    node_os,
+    destination,
+    project,
+    run,
+    job,
+    template,
+    tool_repo,
+    tool_branch,
+):
     metadata = template.render(
         topo_nodes=topo_nodes,
         node_os=node_os,
@@ -78,7 +83,7 @@ def gen_metadata(topo_nodes, node_os, destination,
         run=run,
         job=job,
         tool_repo=tool_repo,
-        tool_branch=tool_branch
+        tool_branch=tool_branch,
     )
     output_file = os.path.join(destination, "scaling_metadata.yaml")
     save_data(output_file, metadata)
@@ -97,10 +102,7 @@ def circle_topology(node_cnt, master="y0"):
 
     res = nx.single_source_dijkstra_path_length(G, master)
 
-    max_dct = {
-        "dist": 0,
-        "node": master
-    }
+    max_dct = {"dist": 0, "node": master}
 
     for node, distance in res.items():
         # print("Node", node, "distance from master", distance)
@@ -113,7 +115,7 @@ def circle_topology(node_cnt, master="y0"):
 
     degrees = dict(G.degree())
     sum_of_edges = sum(degrees.values())
-    avg_degree = sum_of_edges/len(G)
+    avg_degree = sum_of_edges / len(G)
 
     # print(max_dct["dist"], max_dct["node"])
 
@@ -150,15 +152,12 @@ def circle_topology(node_cnt, master="y0"):
 
     while act_index > 1:
         idx = ceil(act_index)
-        indexes = [i for i in range(idx, ceil(len(node_list)/2), idx)]
+        indexes = [i for i in range(idx, ceil(len(node_list) / 2), idx)]
 
         for node_pos in indexes:
 
             possible_edges.append(
-                (
-                    node_list[node_pos],
-                    node_list[node_pos + max_dct["dist"]]
-                )
+                (node_list[node_pos], node_list[node_pos + max_dct["dist"]])
             )
 
         # print("RES", possible_edges)
@@ -172,7 +171,7 @@ def circle_topology(node_cnt, master="y0"):
         G.add_edge(*next_edge)
         degrees = dict(G.degree())
         sum_of_edges = sum(degrees.values())
-        avg_degree = sum_of_edges/len(G)
+        avg_degree = sum_of_edges / len(G)
         # produce_output_image(G)
 
     return G
@@ -213,15 +212,13 @@ def create_basic_topo(max_width, max_levels):
                     topo["edges"] = topo["edges"] + [(predecessor, replica)]
                 else:  # if max level then add all from previous level as pred
                     topo["edges"] = topo["edges"] + [
-                        (pred, replica) for pred in topo["levels"][level-1]
+                        (pred, replica) for pred in topo["levels"][level - 1]
                     ]
 
                 if level - 1 != 0 and level != max_levels - 1:
                     pred_idx += 1
 
-    topo["backbone_edges"] = [
-        (value, key) for key, value in predecessors.items()
-    ]
+    topo["backbone_edges"] = [(value, key) for key, value in predecessors.items()]
     topo["predecessors"] = predecessors
 
     return topo
@@ -229,9 +226,11 @@ def create_basic_topo(max_width, max_levels):
 
 @click.group(chain=True)
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
     help="Location of the context db file",
-    show_default=True
+    show_default=True,
 )
 @click.pass_context
 def graphcli(ctx, storage):
@@ -255,16 +254,22 @@ def predecessors_from_first_levels(levels):
 @graphcli.command()
 @click.argument("input_file")
 @click.option(
-    "-m", "--master", default="y0",
-    help="Specify a master node.", show_default=True
+    "-m", "--master", default="y0", help="Specify a master node.", show_default=True
 )
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
-    help="Change a location for db file.", show_default=True
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
+    help="Change a location for db file.",
+    show_default=True,
 )
 @click.option(
-    "-t", "--type", "data_format", default="ipa",
-    help="Switch between input file formats.", show_default=True,
+    "-t",
+    "--type",
+    "data_format",
+    default="ipa",
+    help="Switch between input file formats.",
+    show_default=True,
     type=click.Choice(["ipa", "edges"]),
 )
 @click.pass_context
@@ -284,14 +289,10 @@ def load(ctx, input_file, data_format, master, storage):
         )
         sys.exit(1)
     except Error as e:
-        sys.stderr.write(
-            f"Input error: {e}\n"
-        )
+        sys.stderr.write(f"Input error: {e}\n")
         sys.exit(1)
     except Exception:
-        sys.stderr.write(
-            "Unexpected input file error\n"
-        )
+        sys.stderr.write("Unexpected input file error\n")
         sys.exit(9)
 
     ctx.obj[GRAPH_OBJECT] = graph_data
@@ -329,27 +330,32 @@ def load(ctx, input_file, data_format, master, storage):
 
 @graphcli.command()
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
-    help="Change a location for db file.", show_default=True
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
+    help="Change a location for db file.",
+    show_default=True,
 )
 @click.option(
-    "--branches", "-x",
+    "--branches",
+    "-x",
     type=click.IntRange(3, 20),
-    help="Topology branches <3-20> (x-axis) ignored when option '--nodes' is used."
+    help="Topology branches <3-20> (x-axis) ignored when option '--nodes' is used.",
 )
 @click.option(
-    "--length", "-y",
+    "--length",
+    "-y",
     type=click.IntRange(3, 20),
-    help="Topology length <3-20> (y-axis) ignored when option '--nodes' is used."
+    help="Topology length <3-20> (y-axis) ignored when option '--nodes' is used.",
 )
 @click.option(
-    "--nodes", "-n",
+    "--nodes",
+    "-n",
     type=click.IntRange(4, 60),
-    help="Needed number of topology nodes <3-60> (server count)."
+    help="Needed number of topology nodes <3-60> (server count).",
 )
 @click.option(
-    "--master", "-m", default="y0",
-    help="Master node name.", show_default=True
+    "--master", "-m", default="y0", help="Master node name.", show_default=True
 )
 @click.pass_context
 def generate(ctx, storage, branches, length, nodes, master):
@@ -395,17 +401,13 @@ def generate(ctx, storage, branches, length, nodes, master):
     print("Topology has been generated to shelve storage")
 
 
-def produce_backbone_image(
-    G, backbone_edges, levels, circular=False, filename=None
-):
+def produce_backbone_image(G, backbone_edges, levels, circular=False, filename=None):
     G = deepcopy(G)
 
     plt.close()
 
     if not circular:
-        pos = nx.spring_layout(
-            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
-        )
+        pos = nx.spring_layout(G, k=0.3 * 1 / sqrt(len(G.nodes())), iterations=150)
     else:
         pos = nx.circular_layout(G)
 
@@ -458,23 +460,25 @@ def produce_backbone_image(
     for level in levels:
         new_node_color = fixed_colors[level]
         nx.draw_networkx_nodes(
-            G, pos,
+            G,
+            pos,
             nodelist=levels[level],
             node_color=new_node_color,
             node_size=700,
-            alpha=0.85
+            alpha=0.85,
         )
 
     colors = [G[u][v]["color"] for u, v in DiG.edges()]
 
     nx.draw_networkx_edges(
-        DiG, pos,
+        DiG,
+        pos,
         edge_color=colors,
         edgelist=DiG.edges,
         width=3.0,
         arrows=True,
         arrowstyle="-|>",
-        arrowsize=20
+        arrowsize=20,
     )  # this HAX (DiGraph) is needed for arrows to be in drawings
 
     labels = {}
@@ -489,7 +493,12 @@ def produce_backbone_image(
         label = f"Level {level} replica" if level else "FreeIPA master"
         patches.append(
             mlines.Line2D(
-                [0], [0], marker='o', alpha=0.8, markersize=15, color='w',
+                [0],
+                [0],
+                marker="o",
+                alpha=0.8,
+                markersize=15,
+                color="w",
                 markerfacecolor=fixed_colors[level],
                 label=label,
                 # https://matplotlib.org/gallery/text_labels_and_annotations/custom_legends.html#sphx-glr-gallery-text-labels-and-annotations-custom-legends-py
@@ -498,14 +507,22 @@ def produce_backbone_image(
 
     patches.append(
         mlines.Line2D(
-            [0], [0], linewidth=4.0, alpha=0.8, color="magenta",
+            [0],
+            [0],
+            linewidth=4.0,
+            alpha=0.8,
+            color="magenta",
             label="Backbone replication agreement",
         )
     )
 
     patches.append(
         mlines.Line2D(
-            [0], [0], linewidth=4.0, alpha=0.8, color="cyan",
+            [0],
+            [0],
+            linewidth=4.0,
+            alpha=0.8,
+            color="cyan",
             label="Additional replication agreement",
         )
     )
@@ -516,10 +533,7 @@ def produce_backbone_image(
 
     plt.axis("off")
     # plt.show()
-    plt.savefig(
-        os.path.abspath(filename),
-        dpi=100
-    )
+    plt.savefig(os.path.abspath(filename), dpi=100)
 
 
 def produce_output_image(G, filename=None, circular=False):
@@ -534,9 +548,7 @@ def produce_output_image(G, filename=None, circular=False):
     DiG = nx.DiGraph(draw_edges)
     # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
     if not circular:
-        pos = nx.spring_layout(
-            G, k=0.3*1/sqrt(len(G.nodes())), iterations=150
-        )
+        pos = nx.spring_layout(G, k=0.3 * 1 / sqrt(len(G.nodes())), iterations=150)
     else:
         pos = nx.circular_layout(G)
     # https://stackoverflow.com/questions/50453043/networkx-drawing-label-partially-outside-the-box
@@ -548,26 +560,11 @@ def produce_output_image(G, filename=None, circular=False):
     plt.xlim(x_min - x_margin, x_max + x_margin)
 
     plot_nodes = {
-        "Complying replicas": {
-            "nodes": [],
-            "color": "green",
-        },
-        "One replication agreement": {
-            "nodes": [],
-            "color": "pink",
-        },
-        "Articulation point": {
-            "nodes": [],
-            "color": "yellow",
-        },
-        "Overloaded replica": {
-            "nodes": [],
-            "color": "red",
-        },
-        "Overloaded articulation point": {
-            "nodes": [],
-            "color": "orange",
-        },
+        "Complying replicas": {"nodes": [], "color": "green",},
+        "One replication agreement": {"nodes": [], "color": "pink",},
+        "Articulation point": {"nodes": [], "color": "yellow",},
+        "Overloaded replica": {"nodes": [], "color": "red",},
+        "Overloaded articulation point": {"nodes": [], "color": "orange",},
     }
 
     for node in G:
@@ -585,11 +582,12 @@ def produce_output_image(G, filename=None, circular=False):
 
     for node_type in plot_nodes:
         nx.draw_networkx_nodes(
-            G, pos,
+            G,
+            pos,
             nodelist=plot_nodes[node_type]["nodes"],
             node_color=plot_nodes[node_type]["color"],
             node_size=700,
-            alpha=0.85
+            alpha=0.85,
         )
 
     # set colors for the edges to draw
@@ -601,13 +599,14 @@ def produce_output_image(G, filename=None, circular=False):
             colors.append("#ff7f0e")  # orange from FreeIPA
 
     nx.draw_networkx_edges(
-        DiG, pos,
+        DiG,
+        pos,
         edge_color=colors,
         edgelist=DiG.edges,
         width=3.0,
         arrows=True,
         arrowstyle="-|>",
-        arrowsize=20
+        arrowsize=20,
     )  # this HAX (DiGraph) is needed for arrows to be in drawings
 
     labels = {}
@@ -621,7 +620,12 @@ def produce_output_image(G, filename=None, circular=False):
     for node_type in plot_nodes:
         patches.append(
             mlines.Line2D(
-                [0], [0], marker='o', alpha=0.8, markersize=15, color='w',
+                [0],
+                [0],
+                marker="o",
+                alpha=0.8,
+                markersize=15,
+                color="w",
                 markerfacecolor=plot_nodes[node_type]["color"],
                 label=node_type,
                 # https://matplotlib.org/gallery/text_labels_and_annotations/custom_legends.html#sphx-glr-gallery-text-labels-and-annotations-custom-legends-py
@@ -630,14 +634,22 @@ def produce_output_image(G, filename=None, circular=False):
 
     patches.append(
         mlines.Line2D(
-            [0], [0], linewidth=4.0, alpha=0.8, color="#90ee90",
+            [0],
+            [0],
+            linewidth=4.0,
+            alpha=0.8,
+            color="#90ee90",
             label="Added replication agreement",
         )
     )
 
     patches.append(
         mlines.Line2D(
-            [0], [0], linewidth=4.0, alpha=0.8, color="#ff7f0e",
+            [0],
+            [0],
+            linewidth=4.0,
+            alpha=0.8,
+            color="#ff7f0e",
             label="Original replication agreement",
         )
     )
@@ -646,30 +658,35 @@ def produce_output_image(G, filename=None, circular=False):
 
     plt.axis("off")
     if filename:
-        plt.savefig(
-            os.path.abspath(filename),
-            dpi=100
-        )
+        plt.savefig(os.path.abspath(filename), dpi=100)
     else:
         plt.show()
 
 
 @graphcli.command()
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
-    help="Change a location for db file.", show_default=True
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
+    help="Change a location for db file.",
+    show_default=True,
 )
 @click.option(
-    "-i", "--interactive", is_flag=True,
-    help="Open a mathplotlib window with the topology graph."
+    "-i",
+    "--interactive",
+    is_flag=True,
+    help="Open a mathplotlib window with the topology graph.",
 )
 @click.option(
-    "-c", "--circular", is_flag=True,
-    help="Force the nodes connections shape to form a circle."
+    "-c",
+    "--circular",
+    is_flag=True,
+    help="Force the nodes connections shape to form a circle.",
 )
 @click.option(
-    "-f", "--filename",
-    help="Change path of saving the file. [default: ./topology_drawing.png]"
+    "-f",
+    "--filename",
+    help="Change path of saving the file. [default: ./topology_drawing.png]",
 )
 @click.pass_context
 def draw(ctx, storage, interactive, filename, circular):
@@ -686,9 +703,7 @@ def draw(ctx, storage, interactive, filename, circular):
         produce_output_image(G, circular=circular)
 
     if not interactive and not filename:
-        produce_output_image(
-            G, filename="topology_drawing.png", circular=circular
-        )
+        produce_output_image(G, filename="topology_drawing.png", circular=circular)
         print("Image stored to file topology_drawing.png")
 
     if filename:
@@ -727,7 +742,7 @@ def print_topology(topology):
     topo_width = len(topology[1])
     for level in topology:
         if len(topology[level]) == 1:
-            ws = "".join(["\t" for _ in range(int(topo_width/2))])
+            ws = "".join(["\t" for _ in range(int(topo_width / 2))])
             line = f"{ws}{topology[level][0]}"
         else:
             line = "\t".join(topology[level])
@@ -737,138 +752,129 @@ def print_topology(topology):
 @graphcli.command()
 @click.option("-d", "--out-dir", default="./DEPLOYMENT_FILES")
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
-    help="Change a location for db file.", show_default=True
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
+    help="Change a location for db file.",
+    show_default=True,
 )
 @click.option(
-    "-j", "--jenkins-template", type=click.Path(exists=True),
-    default=os.path.join(
-        SCALING_DEFAULTS,
-        "jenkinsjob.j2"
-    ),
-    help="Jenkinsfile jinja2 template", show_default=True
+    "-j",
+    "--jenkins-template",
+    type=click.Path(exists=True),
+    default=os.path.join(SCALING_DEFAULTS, "jenkinsjob.j2"),
+    help="Jenkinsfile jinja2 template",
+    show_default=True,
 )
 @click.option(
-    "--base-metadata", type=click.Path(exists=True),
-    default=os.path.join(
-        SCALING_DEFAULTS,
-        "metadata_template.j2"
-    ),
-    help="Base metadata jinja2 template", show_default=True
+    "--base-metadata",
+    type=click.Path(exists=True),
+    default=os.path.join(SCALING_DEFAULTS, "metadata_template.j2"),
+    help="Base metadata jinja2 template",
+    show_default=True,
 )
 @click.option(
-    "--inventory", type=click.Path(exists=True),
-    default=os.path.join(
-        SCALING_DEFAULTS,
-        "inventory_template.j2"
-    ),
-    help="Base inventory jinja2 template", show_default=True
+    "--inventory",
+    type=click.Path(exists=True),
+    default=os.path.join(SCALING_DEFAULTS, "inventory_template.j2"),
+    help="Base inventory jinja2 template",
+    show_default=True,
 )
 @click.option(
-    "--ansible-install", type=click.Path(exists=True),
-    default=os.path.join(
-        SCALING_DEFAULTS,
-        "install_primary_replicas.j2"
-    ),
-    help="Ansible-freeipa install jinja2 template", show_default=True
+    "--ansible-install",
+    type=click.Path(exists=True),
+    default=os.path.join(SCALING_DEFAULTS, "install_primary_replicas.j2"),
+    help="Ansible-freeipa install jinja2 template",
+    show_default=True,
 )
 @click.option(
-    "--out-dir", "-o",
-    type=str, default="FILES",
-    help="Output directory to store generated data"
+    "--out-dir",
+    "-o",
+    type=str,
+    default="FILES",
+    help="Output directory to store generated data",
 )
 @click.option(
     "--metadata-storage",
-    type=str, default="idm-artifacts.usersys.redhat.com",
-    help="Metadata storage server"
+    type=str,
+    default="idm-artifacts.usersys.redhat.com",
+    help="Metadata storage server",
 )
 @click.option(
     "--idm-ci",
     type=str,
     default="https://gitlab.cee.redhat.com/identity-management/idm-ci.git",  # FIXME
-    help="IDM-CI repo"
+    help="IDM-CI repo",
 )
-@click.option(
-    "--repo-branch",
-    type=str,
-    default="master",
-    help="IDM-CI repo branch"
-)
+@click.option("--repo-branch", type=str, default="master", help="IDM-CI repo branch")
 @click.option(
     "--tool-repo",
     type=str,
     default="https://gitlab.cee.redhat.com/identity-management/idm-performance-testing.git",  # FIXME
-    help="SCALE tool repo"
+    help="SCALE tool repo",
 )
 @click.option(
-    "--tool-branch",
+    "--tool-branch", type=str, default="master", help="SCALE tool repo branch"
+)
+@click.option("--node-os", type=str, default="fedora-33", help="Host operating system")
+@click.option(
+    "--project",
+    "-p",
     type=str,
-    default="master",
-    help="SCALE tool repo branch"
+    default="trigger_performance_scale/large-scale",
+    help="Pipeline project for storing data",
 )
 @click.option(
-    "--node-os",
-    type=str,
-    default="fedora-33",
-    help="Host operating system"
+    "--run", "-r", type=str, default="RUNNING", help="Pipeline run for storing data"
 )
 @click.option(
-    "--project", "-p",
-    type=str, default="trigger_performance_scale/large-scale",
-    help="Pipeline project for storing data"
+    "--job", "-j", type=str, default="JOB", help="Pipeline job for storing data"
 )
+@click.option("--freeipa-upstream-copr", type=str, help="freeipa-upstream-copr")
+@click.option("--freeipa-downstream-copr", type=str, help="freeipa-downstream-copr")
+@click.option("--freeipa-custom-repo", type=str, help="freeipa-custom-repo")
 @click.option(
-    "--run", "-r",
-    type=str, default="RUNNING",
-    help="Pipeline run for storing data"
-)
-@click.option(
-    "--job", "-j",
-    type=str, default="JOB",
-    help="Pipeline job for storing data"
-)
-@click.option(
-    "--freeipa-upstream-copr",
-    type=str,
-    help="freeipa-upstream-copr"
-)
-@click.option(
-    "--freeipa-downstream-copr",
-    type=str,
-    help="freeipa-downstream-copr"
-)
-@click.option(
-    "--freeipa-custom-repo",
-    type=str,
-    help="freeipa-custom-repo"
-)
-@click.option(
-    "--ansible-freeipa-upstream-copr",
-    type=str,
-    help="ansible-freeipa-upstream-copr"
+    "--ansible-freeipa-upstream-copr", type=str, help="ansible-freeipa-upstream-copr"
 )
 @click.option(
     "--ansible-freeipa-downstream-copr",
     type=str,
-    help="ansible-freeipa-downstream-copr"
+    help="ansible-freeipa-downstream-copr",
 )
 @click.option(
-    "--ansible-freeipa-custom-repo",
-    type=str,
-    help="ansible-freeipa-custom-repo"
+    "--ansible-freeipa-custom-repo", type=str, help="ansible-freeipa-custom-repo"
 )
 @click.option(
-    "-c", "--circular", is_flag=True,
-    help="Force the nodes connections shape to form a circle."
+    "-c",
+    "--circular",
+    is_flag=True,
+    help="Force the nodes connections shape to form a circle.",
 )
 @click.pass_context
 def deployment(
-    ctx, jenkins_template, out_dir, storage, node_os,
-    idm_ci, repo_branch, tool_repo, tool_branch, project, run, job,
-    metadata_storage, base_metadata, inventory, ansible_install,
-    freeipa_upstream_copr, freeipa_downstream_copr, freeipa_custom_repo,
-    ansible_freeipa_upstream_copr, ansible_freeipa_downstream_copr,
-    ansible_freeipa_custom_repo, circular
+    ctx,
+    jenkins_template,
+    out_dir,
+    storage,
+    node_os,
+    idm_ci,
+    repo_branch,
+    tool_repo,
+    tool_branch,
+    project,
+    run,
+    job,
+    metadata_storage,
+    base_metadata,
+    inventory,
+    ansible_install,
+    freeipa_upstream_copr,
+    freeipa_downstream_copr,
+    freeipa_custom_repo,
+    ansible_freeipa_upstream_copr,
+    ansible_freeipa_downstream_copr,
+    ansible_freeipa_custom_repo,
+    circular,
 ):
     """
     Generate deployment files for the Jenkins automation.
@@ -936,7 +942,7 @@ def deployment(
         freeipa_custom_repo=freeipa_custom_repo,
         ansible_freeipa_upstream_copr=ansible_freeipa_upstream_copr,
         ansible_freeipa_downstream_copr=ansible_freeipa_downstream_copr,
-        ansible_freeipa_custom_repo=ansible_freeipa_custom_repo
+        ansible_freeipa_custom_repo=ansible_freeipa_custom_repo,
     )
     save_data(output_jenkins_job, jenkinsfile)
 
@@ -946,9 +952,7 @@ def deployment(
         backbone_edges,
         levels,
         circular=circular,
-        filename=os.path.join(
-            out_dir, "backbone_topology.png"
-        )
+        filename=os.path.join(out_dir, "backbone_topology.png"),
     )
     # merge dictionary items to one list containing all nodes
     topo_nodes = list(chain(*[levels[level] for level in levels]))
@@ -958,10 +962,17 @@ def deployment(
     metadata_template = load_jinja_template(base_metadata)
 
     # Generate the metadata file for all nodes inside of FILES directory
-    gen_metadata(topo_nodes, node_os, out_dir,
-                 project, run, job,
-                 metadata_template,
-                 tool_repo, tool_branch)
+    gen_metadata(
+        topo_nodes,
+        node_os,
+        out_dir,
+        project,
+        run,
+        job,
+        metadata_template,
+        tool_repo,
+        tool_branch,
+    )
 
     print("Generate ansible-freeipa inventory file")
     # Load jinja template
@@ -969,9 +980,9 @@ def deployment(
 
     # Generate ansible-freeipa inventory file
     outpu_job_inventory = os.path.join(out_dir, "perf-inventory")
-    inventoryfile = job_inventory.render(master_server=topo_nodes[0],
-                                         levels=levels,
-                                         predecessors=predecessors)
+    inventoryfile = job_inventory.render(
+        master_server=topo_nodes[0], levels=levels, predecessors=predecessors
+    )
     save_data(outpu_job_inventory, inventoryfile)
 
     print("Generate ansible-freeipa install file")
@@ -982,13 +993,10 @@ def deployment(
     ansible_install = load_jinja_template(ansible_install)
     # Generate ansible-freeipa install file
     output_install = os.path.join(out_dir, "perf-install.yml")
-    installfile = ansible_install.render(levels=levels,
-                                         missing=segments)
+    installfile = ansible_install.render(levels=levels, missing=segments)
     save_data(output_install, installfile)
 
-    produce_output_image(
-        G, os.path.join(out_dir, "topology.png")
-    )
+    produce_output_image(G, os.path.join(out_dir, "topology.png"))
 
 
 def compatible_backbone_edges(G, master):
@@ -1032,17 +1040,13 @@ def sort_by_degree(G, nodes=None, reverse=False):
     if reverse:
         for degree in range(max(nodes_by_degree, key=int), 0, -1):
             try:
-                sorted_nodes[degree] = sorted(
-                    nodes_by_degree[degree], reverse=reverse
-                )
+                sorted_nodes[degree] = sorted(nodes_by_degree[degree], reverse=reverse)
             except KeyError:
                 pass
     else:
         for degree in range(max(nodes_by_degree, key=int) + 1):
             try:
-                sorted_nodes[degree] = sorted(
-                    nodes_by_degree[degree], reverse=reverse
-                )
+                sorted_nodes[degree] = sorted(nodes_by_degree[degree], reverse=reverse)
             except KeyError:
                 pass
 
@@ -1051,8 +1055,11 @@ def sort_by_degree(G, nodes=None, reverse=False):
 
 @graphcli.command()
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
-    help="Change a location for db file.", show_default=True
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
+    help="Change a location for db file.",
+    show_default=True,
 )
 @click.pass_context
 def analyze(ctx, storage):
@@ -1073,14 +1080,10 @@ def analyze(ctx, storage):
     eccentricity = nx.eccentricity(G)
     print(
         "Maximum hop count distance from two random replicas:",
-        max(eccentricity.items(), key=operator.itemgetter(1))[1]
+        max(eccentricity.items(), key=operator.itemgetter(1))[1],
     )
     print()
-    print(
-        "Number of connected components:\t" + str(
-            nx.number_connected_components(G)
-        )
-    )
+    print("Number of connected components:\t" + str(nx.number_connected_components(G)))
     print("----------------------------------------")
     print("Analyzing replicas as standalone entity...")
     print("--------------------")
@@ -1093,8 +1096,7 @@ def analyze(ctx, storage):
 
         if repl_agreements > MAX_REPL_AGREEMENTS:
             issues.append(
-                f"More than {MAX_REPL_AGREEMENTS} "
-                f"replication agreements\t| {node}"
+                f"More than {MAX_REPL_AGREEMENTS} " f"replication agreements\t| {node}"
             )
 
     if issues and not len(G) == 2:
@@ -1151,9 +1153,7 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
         if len(list(nx.articulation_points(G))) == 0:
             # if there are no articulation points we stop
-            sys.stdout.write(
-                "Info: Will not add more replication agreements\n"
-            )
+            sys.stdout.write("Info: Will not add more replication agreements\n")
             break
 
         # pick articulation point to solve issue for FIXME
@@ -1171,9 +1171,7 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
             try:
                 comp = all_components.pop()
             except IndexError:
-                sys.stderr.write(
-                    "No more topology components left to try connecting\n"
-                )
+                sys.stderr.write("No more topology components left to try connecting\n")
                 sys.exit(2)
 
             # get dictionary with keys corresponding to degrees and each key
@@ -1190,9 +1188,8 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
             start = 0
             to_add = None
-            while (
-                not to_add  # and to_add not in art_points
-                and (start < len(to_pick_from))
+            while not to_add and (  # and to_add not in art_points
+                start < len(to_pick_from)
             ):
                 to_add = to_pick_from[start]
                 # print(to_add, to_pick_from)
@@ -1243,9 +1240,7 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
             edge_to_add = (left, right)
             step += 1
             G.add_edges_from([edge_to_add], color=color)
-            produce_output_image(
-                G, f"fixup_step_{step}_add_{left}_{right}.png"
-            )
+            produce_output_image(G, f"fixup_step_{step}_add_{left}_{right}.png")
             added_edges.append(edge_to_add)
 
         all_components = list(nx.biconnected_components(G))
@@ -1280,14 +1275,10 @@ def remove_overloaded_nodes_edges(
         max_degree_node = next(sorted_max_degree_nodes)
 
         if max_degree <= max_repl_agreements:
-            sys.stdout.write(
-                "Info: Will not remove more replication agreements\n"
-            )
+            sys.stdout.write("Info: Will not remove more replication agreements\n")
             break
 
-        neighbors = sorted(
-            [n for n in G.neighbors(max_degree_node)]
-        )
+        neighbors = sorted([n for n in G.neighbors(max_degree_node)])
 
         sort_neig_dict = sort_by_degree(G, nodes=neighbors)
         sort_neig = sorted(sort_neig_dict, reverse=True)
@@ -1340,21 +1331,17 @@ def remove_overloaded_nodes_edges(
                 "agreement created articulation point\n"
             )
             if add_while_removing:
-                sys.stdout.write(
-                    "Info: Trying to fix new articulation points\n"
-                )
+                sys.stdout.write("Info: Trying to fix new articulation points\n")
                 G, added, step = remove_articulation_points(
-                    G, step=step,
+                    G,
+                    step=step,
                     omit_max=omit_max,
                     max_repl_agreements=max_repl_agreements,
                 )
                 added_edges += added
 
                 for new in added:
-                    if (
-                        (new[0], new[1]) in removed
-                        or (new[1], new[0]) in removed
-                    ):
+                    if (new[0], new[1]) in removed or (new[1], new[0]) in removed:
                         sys.stderr.write(
                             f"Error Added replication agreement {new} has been"
                             f" found in already removed list: {removed}\n"
@@ -1377,27 +1364,36 @@ def remove_overloaded_nodes_edges(
 
 @graphcli.command()
 @click.option(
-    "-m", "--max", "max_repl_agreements",
-    default=MAX_REPL_AGREEMENTS, type=click.IntRange(2, 10),
-    help="Change maximum number <2-10> of replication agreements per replica."
+    "-m",
+    "--max",
+    "max_repl_agreements",
+    default=MAX_REPL_AGREEMENTS,
+    type=click.IntRange(2, 10),
+    help="Change maximum number <2-10> of replication agreements per replica.",
 )
 @click.option(
-    "--omit-max", is_flag=True, default=False,
+    "--omit-max",
+    is_flag=True,
+    default=False,
     help="Do not check the maximum number of the replication agreements"
-    " while adding a new replication agreement to connect a topology."
+    " while adding a new replication agreement to connect a topology.",
 )
 @click.option(
-    "--add-while-removing", is_flag=True, default=False,
+    "--add-while-removing",
+    is_flag=True,
+    default=False,
     help="When removal of the replication agreement creates a articulation "
-    "point add edge to fix the issue."
+    "point add edge to fix the issue.",
 )
 @click.option(
-    "-s", "--storage", default="./.graph_storage.db",
-    help="Change a location for db file.", show_default=True
+    "-s",
+    "--storage",
+    default="./.graph_storage.db",
+    help="Change a location for db file.",
+    show_default=True,
 )
 @click.pass_context
-def fixup(ctx, storage, max_repl_agreements,
-          omit_max, add_while_removing):
+def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
     """
     Generate an Ansible automation to remove topology weak spots.
     """
@@ -1414,13 +1410,12 @@ def fixup(ctx, storage, max_repl_agreements,
     produce_output_image(G, f"fixup_step_{step}_start.png")
 
     G, added_edges, step = remove_articulation_points(
-        G, step=step,
-        omit_max=omit_max,
-        max_repl_agreements=max_repl_agreements,
+        G, step=step, omit_max=omit_max, max_repl_agreements=max_repl_agreements,
     )
 
     G, removed, added_with_removal, step = remove_overloaded_nodes_edges(
-        G, step=step,
+        G,
+        step=step,
         add_while_removing=add_while_removing,
         omit_max=omit_max,
         max_repl_agreements=max_repl_agreements,
@@ -1452,16 +1447,14 @@ def fixup(ctx, storage, max_repl_agreements,
         # intersection should be empty in perfect case
         print(
             "Replication agreement intersection:",
-            set(added_edges).intersection(set(removed))
+            set(added_edges).intersection(set(removed)),
         )
 
         print("----------------------------------------")
 
         print("Saving result graph image")
 
-        produce_output_image(
-            G, "fixup_result.png"
-        )
+        produce_output_image(G, "fixup_result.png")
 
         print("----------------------------------------")
 
@@ -1476,16 +1469,14 @@ def fixup(ctx, storage, max_repl_agreements,
         print("----------------------------------------")
         print("Generating fixup playbook")
 
-        fixup_playbook = load_jinja_template(os.path.join(
-            SCALING_DEFAULTS,
-            "fixup_topology_segments.j2"
-        ))
+        fixup_playbook = load_jinja_template(
+            os.path.join(SCALING_DEFAULTS, "fixup_topology_segments.j2")
+        )
 
         # Generate fixup playbook
         fixup = "fixup_result.yml"
         fixup_data = fixup_playbook.render(
-            missing=missing_segments,
-            redundant=redundant_segments,
+            missing=missing_segments, redundant=redundant_segments,
         )
 
         save_data(fixup, fixup_data)
