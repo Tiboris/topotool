@@ -119,7 +119,7 @@ def circle_topology(node_cnt, master="y0"):
 
     # print(max_dct["dist"], max_dct["node"])
 
-    # FIXME use distance that is the most distant node
+    # use distance that is the most distant node
     #     and half the index for next node
     # eg. first is circle of 10 then 0-5
     # dist is 5
@@ -128,7 +128,6 @@ def circle_topology(node_cnt, master="y0"):
     # connect 3 with 3+max dst
 
     # produce_output_image(G)
-    # 2.4 works fine with 10 nodes
 
     node_to_back = []
     node_master = []
@@ -166,6 +165,8 @@ def circle_topology(node_cnt, master="y0"):
     # to have more symmetric result we reverse order of edges
     possible_edges.reverse()
     # print(possible_edges)
+
+    # 2.4 works fine with 10 nodes but we use 2.6
     while possible_edges and avg_degree < 2.6:
         next_edge = possible_edges.pop()
         G.add_edge(*next_edge)
@@ -254,13 +255,13 @@ def predecessors_from_first_levels(levels):
 @graphcli.command()
 @click.argument("input_file")
 @click.option(
-    "-m", "--master", default="y0", help="Specify a master node.", show_default=True
+    "-m", "--master", default="y0", help="Specify a master node", show_default=True
 )
 @click.option(
     "-s",
     "--storage",
     default="./.graph_storage.db",
-    help="Change a location for db file.",
+    help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
 @click.option(
@@ -268,7 +269,7 @@ def predecessors_from_first_levels(levels):
     "--type",
     "data_format",
     default="ipa",
-    help="Switch between input file formats.",
+    help="Switch between input file formats",
     show_default=True,
     type=click.Choice(["ipa", "edges"]),
 )
@@ -333,29 +334,29 @@ def load(ctx, input_file, data_format, master, storage):
     "-s",
     "--storage",
     default="./.graph_storage.db",
-    help="Change a location for db file.",
+    help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
 @click.option(
     "--branches",
     "-x",
     type=click.IntRange(3, 20),
-    help="Topology branches <3-20> (x-axis) ignored when option '--nodes' is used.",
+    help="Topology branches <3-20> (x-axis) ignored when option '--nodes' is used",
 )
 @click.option(
     "--length",
     "-y",
     type=click.IntRange(3, 20),
-    help="Topology length <3-20> (y-axis) ignored when option '--nodes' is used.",
+    help="Topology length <3-20> (y-axis) ignored when option '--nodes' is used",
 )
 @click.option(
     "--nodes",
     "-n",
     type=click.IntRange(4, 60),
-    help="Needed number of topology nodes <3-60> (server count).",
+    help="Needed number of topology nodes <3-60> (server count)",
 )
 @click.option(
-    "--master", "-m", default="y0", help="Master node name.", show_default=True
+    "--master", "-m", default="y0", help="Master node name", show_default=True
 )
 @click.pass_context
 def generate(ctx, storage, branches, length, nodes, master):
@@ -560,11 +561,11 @@ def produce_output_image(G, filename=None, circular=False):
     plt.xlim(x_min - x_margin, x_max + x_margin)
 
     plot_nodes = {
-        "Complying replicas": {"nodes": [], "color": "green",},
-        "One replication agreement": {"nodes": [], "color": "pink",},
-        "Articulation point": {"nodes": [], "color": "yellow",},
-        "Overloaded replica": {"nodes": [], "color": "red",},
-        "Overloaded articulation point": {"nodes": [], "color": "orange",},
+        "Complying replicas": {"nodes": [], "color": "green"},
+        "One replication agreement": {"nodes": [], "color": "pink"},
+        "Articulation point": {"nodes": [], "color": "yellow"},
+        "Overloaded replica": {"nodes": [], "color": "red"},
+        "Overloaded articulation point": {"nodes": [], "color": "orange"},
     }
 
     for node in G:
@@ -668,20 +669,20 @@ def produce_output_image(G, filename=None, circular=False):
     "-s",
     "--storage",
     default="./.graph_storage.db",
-    help="Change a location for db file.",
+    help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
 @click.option(
     "-i",
     "--interactive",
     is_flag=True,
-    help="Open a mathplotlib window with the topology graph.",
+    help="Open a mathplotlib window with the topology graph",
 )
 @click.option(
     "-c",
     "--circular",
     is_flag=True,
-    help="Force the nodes connections shape to form a circle.",
+    help="Force the nodes figure to circle shape",
 )
 @click.option(
     "-f",
@@ -690,7 +691,7 @@ def produce_output_image(G, filename=None, circular=False):
 )
 @click.pass_context
 def draw(ctx, storage, interactive, filename, circular):
-    """Create a topology graph picture."""
+    """Create a topology graph picture"""
     ctx = load_context(ctx, storage)
 
     try:
@@ -718,6 +719,7 @@ def get_segments(edges):
     node_iter = iter(most_common_nodes)
     processed = set()
     not_processed = set(edges)
+
     while not_processed:
         left = set()
         right = set()
@@ -729,6 +731,7 @@ def get_segments(edges):
             elif node == b:
                 right.add(a)
                 processed.add((a, b))
+
         not_processed -= processed
 
         if right.union(left):
@@ -746,6 +749,7 @@ def print_topology(topology):
             line = f"{ws}{topology[level][0]}"
         else:
             line = "\t".join(topology[level])
+
         print(line)
 
 
@@ -755,7 +759,7 @@ def print_topology(topology):
     "-s",
     "--storage",
     default="./.graph_storage.db",
-    help="Change a location for db file.",
+    help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
 @click.option(
@@ -810,7 +814,9 @@ def print_topology(topology):
 @click.option(
     "--tool-repo",
     type=str,
-    default="https://gitlab.cee.redhat.com/identity-management/idm-performance-testing.git",  # FIXME
+    default=(
+        "https://gitlab.cee.redhat.com/identity-management/idm-performance-testing.git"
+    ),  # FIXME
     help="SCALE tool repo",
 )
 @click.option(
@@ -848,7 +854,7 @@ def print_topology(topology):
     "-c",
     "--circular",
     is_flag=True,
-    help="Force the nodes connections shape to form a circle.",
+    help="Force the nodes figure to circle shape",
 )
 @click.pass_context
 def deployment(
@@ -979,11 +985,11 @@ def deployment(
     job_inventory = load_jinja_template(inventory)
 
     # Generate ansible-freeipa inventory file
-    outpu_job_inventory = os.path.join(out_dir, "perf-inventory")
+    output_job_inventory = os.path.join(out_dir, "perf-inventory")
     inventoryfile = job_inventory.render(
         master_server=topo_nodes[0], levels=levels, predecessors=predecessors
     )
-    save_data(outpu_job_inventory, inventoryfile)
+    save_data(output_job_inventory, inventoryfile)
 
     print("Generate ansible-freeipa install file")
     missing_edges = set(G.edges) - set(backbone_edges)
@@ -1035,6 +1041,7 @@ def sort_by_degree(G, nodes=None, reverse=False):
             record = nodes_by_degree[cnt]
         except KeyError:
             record = []
+
         nodes_by_degree[cnt] = add_list_item(record, node)
 
     if reverse:
@@ -1058,7 +1065,7 @@ def sort_by_degree(G, nodes=None, reverse=False):
     "-s",
     "--storage",
     default="./.graph_storage.db",
-    help="Change a location for db file.",
+    help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
 @click.pass_context
@@ -1072,7 +1079,7 @@ def analyze(ctx, storage):
         G = ctx.obj[GRAPH_NX]
         # master = ctx.obj[MASTER]
     except KeyError:
-        sys.stderr.write("Please load or generate the topology first.")
+        sys.stderr.write("Please load or generate the topology first")
         sys.exit(1)
 
     print("----------------------------------------")
@@ -1085,8 +1092,9 @@ def analyze(ctx, storage):
     print()
     print("Number of connected components:\t" + str(nx.number_connected_components(G)))
     print("----------------------------------------")
-    print("Analyzing replicas as standalone entity...")
+    print("Analyzing replicas as standalone entity")
     print("--------------------")
+
     issues = []
     for node in G:
         repl_agreements = nx.degree(G, node)
@@ -1104,13 +1112,14 @@ def analyze(ctx, storage):
         print("-----\t\t\t\t| ----")
         for issue in issues:
             print(issue)
+
     else:
-        print("No issues found for the replicas.")
+        print("No issues found for the replicas")
 
     print("----------------------------------------")
-    print("Analyzing topology connectivity...")
+    print("Analyzing topology connectivity")
     print("--------------------")
-    print("Looking for articulation points...")
+    print("Looking for articulation points")
     print(
         "Note: Optimal FreeIPA replication topology should "
         "not contain any articulation point"
@@ -1125,7 +1134,7 @@ def analyze(ctx, storage):
 
         print(f"Articulation point(s) found: {len(art_points)}")
         print("--------------------")
-        print("Looking for biconnected components...")
+        print("Looking for biconnected components")
         print(
             "Note: Optimal FreeIPA replication topology should "
             "contain one biconnected component"
@@ -1369,27 +1378,27 @@ def remove_overloaded_nodes_edges(
     "max_repl_agreements",
     default=MAX_REPL_AGREEMENTS,
     type=click.IntRange(2, 10),
-    help="Change maximum number <2-10> of replication agreements per replica.",
+    help="Change maximum number <2-10> of replication agreements per replica",
 )
 @click.option(
     "--omit-max",
     is_flag=True,
     default=False,
     help="Do not check the maximum number of the replication agreements"
-    " while adding a new replication agreement to connect a topology.",
+    " while adding a new replication agreement to connect a topology",
 )
 @click.option(
     "--add-while-removing",
     is_flag=True,
     default=False,
     help="When removal of the replication agreement creates a articulation "
-    "point add edge to fix the issue.",
+    "point add edge to fix the issue",
 )
 @click.option(
     "-s",
     "--storage",
     default="./.graph_storage.db",
-    help="Change a location for db file.",
+    help="Change a location for db file (to use different topology use load command)",
     show_default=True,
 )
 @click.pass_context
@@ -1481,7 +1490,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing):
 
         save_data(fixup, fixup_data)
     else:
-        print("Nothing to do...")
+        print("Nothing to do")
 
     print("========================================")
 
