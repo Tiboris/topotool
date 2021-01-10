@@ -1,9 +1,13 @@
+[ipaserver]
+{{ ipa_master }}.ipadomain.test
+
 [ipareplicas]
 {%-  for replica in ipa_replicas %}
 {{ replica }}.ipadomain.test
 {%-   endfor %}
 
 [ipacluster:children]
+ipaserver
 ipareplicas
 
 [ipacluster:vars]

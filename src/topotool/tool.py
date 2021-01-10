@@ -546,11 +546,13 @@ def produce_output_image(G, filename=None, circular=False):
 
     # this HAX (DiGraph) is needed for arrows to be in drawings
     DiG = nx.DiGraph(draw_edges)
+
     # https://stackoverflow.com/questions/49121491/issue-with-spacing-nodes-in-networkx-graph
     if not circular:
         pos = nx.spring_layout(G, k=0.3 * 1 / sqrt(len(G.nodes())), iterations=150)
     else:
         pos = nx.circular_layout(G)
+
     # https://stackoverflow.com/questions/50453043/networkx-drawing-label-partially-outside-the-box
     plt.figure(figsize=(11, 7))
     x_values, _y_values = zip(*pos.values())
@@ -665,9 +667,11 @@ def produce_output_image(G, filename=None, circular=False):
         )
     )
 
-    plt.legend(handles=patches)
+    loc = 10 if circular else 0
 
+    plt.legend(loc=loc, handles=patches)
     plt.axis("off")
+
     if filename:
         plt.savefig(os.path.abspath(filename), dpi=100)
     else:
@@ -1449,6 +1453,7 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing, no_fq
 
     try:
         G = ctx.obj[GRAPH_NX]
+        master = ctx.obj[MASTER]
     except KeyError:
         sys.stderr.write("Please load or generate the topology first\n")
         sys.exit(1)
@@ -1517,9 +1522,16 @@ def fixup(ctx, storage, max_repl_agreements, omit_max, add_while_removing, no_fq
             os.path.join(SCALING_DEFAULTS, f"fixup_inventory{fqdn}.j2")
         )
         inv = "fixup_result.inv"
-        inv_data = fixup_inv.render(
-            ipa_replicas=set(tuple(chain(*(removed + added_edges))))
-        )
+
+        replicas = set(tuple(chain(*(removed + added_edges))))
+
+        try:
+            replicas.remove(master)
+        except KeyError:
+            pass  # when master node is not in list of replicas it is okay
+
+        inv_data = fixup_inv.render(ipa_master=master, ipa_replicas=replicas,)
+
         save_data(inv, inv_data)
     else:
         print("Nothing to do")
