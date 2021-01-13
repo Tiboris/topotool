@@ -765,7 +765,6 @@ def print_topology(topology):
 
 
 @graphcli.command()
-@click.option("-d", "--out-dir", default="./DEPLOYMENT_FILES")
 @click.option(
     "-s",
     "--storage",
@@ -806,7 +805,7 @@ def print_topology(topology):
     "--out-dir",
     "-o",
     type=str,
-    default="FILES",
+    default="DEPLOYMENT_FILES",
     help="Output directory to store generated data",
 )
 @click.option(
