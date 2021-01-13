@@ -2,8 +2,14 @@ domains:
   - name: ipadomain.test
     type: ipa
     hosts:
+{%-  for dnsname in topo_nodes %}
       - name: {{ dnsname }}.ipadomain.test
         role: replica
+        group: ipaserver
+        os: {{ node_os }}
+{%   endfor %}
+      - name: controller.ipadomain.test
+        role: ansible_runner
         group: ipaserver
         os: {{ node_os }}
 phases:
@@ -11,35 +17,46 @@ phases:
     steps:
       - playbook: init/testrunner-dir.yaml
       - command: |
-          git clone --depth 1 {{ tool_repo }} --branch={{ tool_branch }}
+          git clone --depth 1 https://gitlab.cee.redhat.com/identity-management/idm-performance-testing.git --branch=master
         cwd: ../
       - playbook: ../idm-performance-testing/large-scale/playbooks/perf-config.yaml
   - name: provision
     steps:
-      - playbook: provision/linchpin-up.yaml
+      - playbook: provision/mrack-up.yaml
       - playbook: provision/wait.yaml
       - playbook: provision/chrony.yaml
-      - playbook: ../idm-performance-testing/large-scale/playbooks/scale-collect.yaml
-        extra_vars:
-          project: {{ project }}
-          run: {{ run }}
-          job: {{ job }}
   - name: prep
     steps:
       - playbook: prep/redhat-base.yaml
       - playbook: prep/repos.yaml
       - playbook: ../idm-performance-testing/large-scale/playbooks/add-repo.yaml
       - playbook: ../idm-performance-testing/large-scale/playbooks/scale-firewall.yaml
-      # - playbook: ../idm-performance-testing/large-scale/playbooks/pbench-agent.yaml
-      - command: wget -np -nH --cut-dirs 4 -r idm-artifacts.usersys.redhat.com/{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/
-      - command: tail -n +3 {{ job }}/y0.*.inv | awk '{if($1!="==>") print $0}' >> ./config/test.inventory.yaml
-      - command: "sed -i '/hosts: / d' ./config/test.inventory.yaml"
+      - playbook: ../idm-performance-testing/large-scale/playbooks/pbench-agent.yaml
       - command: cat ./config/test.inventory.yaml
       - playbook: ../idm-performance-testing/large-scale/playbooks/perf-network.yaml
+#     CONTROLLER
+      - playbook: ../idm-performance-testing/large-scale/playbooks/scale-prepare-runner.yaml
   - name: test
     steps:
-      - command: echo READY
+      - command: wget -np -nH --cut-dirs 4 -r idm-artifacts.usersys.redhat.com/{{ metadata_storage }}/{{ project }}/{{ run }}/{{ job }}/
+        host: controller.ipadomain.test
+      - command: sed -i ':a;$!{N;ba};s/\nnameserver[^\n]*//' /etc/resolv.conf
+        host: y0.ipadomain.test
+      - playbook: ../idm-performance-testing/large-scale/playbooks/logger.yaml
+        extra_vars:
+          marker: "DEPLOYMENT"
+          phase: "STARTED"
+      - command: ansible-playbook
+          --ssh-extra-args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          -vv -f 12 -i ./{{ job }}/perf-inventory ./{{ job }}/perf-install.yml
+        host: controller.ipadomain.test
+      - playbook: ../idm-performance-testing/large-scale/playbooks/logger.yaml
+        extra_vars:
+          marker: "DEPLOYMENT"
+          phase: "FINISHED"
+      - playbook: ../idm-performance-testing/large-scale/playbooks/journalctl-collect.yaml
+        extra_vars:
+          marker: "DEPLOYMENT"
   - name: teardown
     steps:
       - command: echo SKIP-TEARDOWN
-
