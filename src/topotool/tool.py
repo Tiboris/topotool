@@ -1270,7 +1270,7 @@ def remove_articulation_points(G, step, omit_max, max_repl_agreements):
 
                 if not added and to_add in can_not_add:
                     sys.stdout.write(
-                        "Hint: Try adding --omit-max-degree option to add "
+                        "Hint: Try adding --omit-max option to add "
                         "replication agreement even when maximum "
                         " degree of node is reached\n"
                     )
